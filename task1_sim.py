@@ -112,10 +112,10 @@ def check_constraints(data: mujoco.MjData, tau_raw: np.ndarray, saturated: np.nd
 
 
 def add_time_overlay(viewer: mujoco.viewer.Handle, sim_time: float, violation: str | None) -> None:
-    """Render sim time (and optional violation) into the viewer overlay."""
-    viewer.add_overlay(mujoco.mjtGridPos.mjGRID_TOPLEFT, "Sim time", f"{sim_time:6.3f} s")
+    """Print sim time and violation info (viewer overlay not available in MuJoCo 3.x)."""
+    # MuJoCo 3.x passive viewer doesn't support add_overlay; print to console instead
     if violation:
-        viewer.add_overlay(mujoco.mjtGridPos.mjGRID_TOPLEFT, "Violation", violation)
+        print(f"[t={sim_time:.3f}s] {violation}")
 
 
 def run(args: argparse.Namespace) -> None:
