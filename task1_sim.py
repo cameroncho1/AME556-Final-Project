@@ -129,9 +129,10 @@ def run(args: argparse.Namespace) -> None:
     viewer = None
     if args.interactive:
         viewer = mujoco.viewer.launch_passive(model, data)
-        viewer.cam.elevation = -20
-        viewer.cam.distance = 3.0
-        viewer.cam.lookat[:] = [0, 0, 0.5]
+        cam_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_CAMERA, "side_follow")
+        viewer.cam.type = mujoco.mjtCamera.mjCAMERA_FIXED
+        viewer.cam.fixedcamid = cam_id
+
 
     violation_log: List[str] = []
     stop_reason = None
