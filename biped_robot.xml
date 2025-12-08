@@ -1,0 +1,52 @@
+<mujoco model = "biped_robot">
+    <option gravity="0 -9.81 0"/>
+    <worldbody>
+        <camera name = "xy_view" pos="0 1 4"/>
+        
+        <geom type = "plane" zaxis = "0 1 0" size = "5 5 .1" friction="0.5 0.0 0.0" solref="0.0022 1.0" rgba="0.7 0.9 0.7 1"/>
+        <body name = "body_frame" pos = "0 0 0" >
+            <inertial mass = "8" diaginertia="0.0419 0.0153 0.0433" pos = "0 0 0 "/>
+            <geom name = "body_geom" type = "box" size = ".075 .125 .01">
+            </geom>
+            <!--COM joints-->
+            <joint name = "x" type = "slide" pos = "0 0 0" axis = "1 0 0"/>
+            <joint name = "y" type = "slide" pos = "0 0 0" axis = "0 1 0"/>
+            <joint name = "body_rot" type = "hinge" pos = "0 0 0" axis = "0 0 1"/>
+
+            <!-- left leg -->
+            <body name = "left_thigh" pos = "0 -0.125 0" >
+                <joint name = "q1" type = "hinge" pos = "0 0 0" axis = "0 0 1"/>
+                <inertial mass = "0.25" diaginertia="0.001008 1e-6 0.001008" pos = "0 -.11 0 "/> <!-- body frame is at the first joint's anchor top of the link so must offset -->
+                <geom type = "capsule" fromto="0 0 0  0 -0.22 0" size="0.02" />
+                <body name = "left_shin" pos = "0 -.22 0">
+                    <joint name = "q2" pos = "0 0 0 " type = "hinge" axis = "0 0 1"/>
+                    <inertial mass = "0.25" diaginertia="0.001008 1e-6 0.001008" pos = "0 -.11 0 "/>
+                    <geom type = "capsule" fromto = "0 0 .01 0 -0.22 .01" size = ".02"/>
+                </body>
+            </body>    
+
+            <!-- right leg -->
+            <body name = "right_thigh" pos = "0 -0.125 0" >
+                <joint name = "q3" type = "hinge" pos = "0 0 0" axis = "0 0 1"/>
+                <inertial mass = "0.25" diaginertia="0.001008 1e-6 0.001008" pos = "0 -.11 0 "/> <!-- body frame is at the first joint's anchor top of the link so must offset -->
+                <geom type = "capsule" fromto="0 0 0  0 -0.22 0" size="0.02" />
+                <body name = "right_shin" pos = "0 -.22 0">
+                    <joint name = "q4" pos = "0 0 0 " type = "hinge" axis = "0 0 1"/>
+                    <inertial mass = "0.25" diaginertia="0.001008 1e-6 0.001008" pos = "0 -.11 0 "/>
+                    <geom type = "capsule" fromto = "0 0 -.01 0 -0.22 -.01" size = ".02"/>
+                </body>
+            </body>              
+        </body> 
+    </worldbody>
+    <actuator>
+        <motor name="hip_L"  joint="q1" gear="1"/>
+        <motor name="knee_L" joint="q2" gear="1"/>
+        <motor name="hip_R"  joint="q3" gear="1"/>
+        <motor name="knee_R" joint="q4" gear="1"/>
+
+    </actuator>
+
+    <keyframe>
+        <key name="init" qpos="0 .55 0 -1.0471975512 1.5707963268 0 1.5707963268" qvel="0 0 0 0 0 0 0"/>
+    </keyframe>
+</mujoco>
