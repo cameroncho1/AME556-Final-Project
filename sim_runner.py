@@ -140,7 +140,7 @@ def run_simulation(
         else:
             tau_cmd = np.asarray(tau_cmd, dtype=float)
             prev_tau_cmd = tau_cmd.copy()
-        print("Applied Torques at time {:.2f}s: {}".format(data.time, tau_cmd))
+        # print("Applied Torques at time {:.2f}s: {}".format(data.time, tau_cmd))
         data.ctrl[:] = tau_cmd
         mujoco.mj_step(model, data)
         step_count += 1

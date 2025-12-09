@@ -50,6 +50,6 @@
     </actuator>
 
     <keyframe>
-        <key name="init" qpos="0 .55 0 -0.5471975512 .5707963268 0 .5707963268" qvel="0 0 0 0 0 0 0"/>
+        <key name="init" qpos="0 .55 0 -1.2471975512 1.0707963268 -.2 1.0707963268" qvel="0 0 0 0 0 0 0"/>
     </keyframe>
 </mujoco>
