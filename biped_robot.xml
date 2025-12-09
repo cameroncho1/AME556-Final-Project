@@ -1,7 +1,8 @@
 <mujoco model = "biped_robot">
     <option gravity="0 -9.81 0"/>
     <worldbody>
-        <camera name = "xy_view" pos="0 1 4"/>
+        <camera name="side_follow" mode="trackcom" pos="0 0.7 3"/>
+
         
         <geom type = "plane" zaxis = "0 1 0" size = "5 5 .1" friction="0.5 0.0 0.0" solref="0.0022 1.0" rgba="0.7 0.9 0.7 1"/>
         <body name = "body_frame" pos = "0 0 0" >
