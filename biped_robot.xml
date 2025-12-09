@@ -14,7 +14,7 @@
             <joint name = "body_rot" type = "hinge" pos = "0 0 0" axis = "0 0 1"/>
 
             <!-- left leg -->
-            <body name = "left_thigh" pos = "0 -0.125 0" >
+            <body name = "left_thigh" pos = "0 -0.125 .02" >
                 <joint name = "q1" type = "hinge" pos = "0 0 0" axis = "0 0 1"/>
                 <inertial mass = "0.25" diaginertia="0.001008 1e-6 0.001008" pos = "0 -.11 0 "/> <!-- body frame is at the first joint's anchor top of the link so must offset -->
                 <geom type = "capsule" fromto="0 0 0  0 -0.22 0" size="0.02" />
@@ -26,7 +26,7 @@
             </body>    
 
             <!-- right leg -->
-            <body name = "right_thigh" pos = "0 -0.125 0" >
+            <body name = "right_thigh" pos = "0 -0.125 -0.02" >
                 <joint name = "q3" type = "hinge" pos = "0 0 0" axis = "0 0 1"/>
                 <inertial mass = "0.25" diaginertia="0.001008 1e-6 0.001008" pos = "0 -.11 0 "/> <!-- body frame is at the first joint's anchor top of the link so must offset -->
                 <geom type = "capsule" fromto="0 0 0  0 -0.22 0" size="0.02" />
