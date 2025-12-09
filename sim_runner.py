@@ -17,7 +17,7 @@ ControllerFn = Callable[[mujoco.MjModel, mujoco.MjData, float], Any]
 ConstraintFn = Callable[[mujoco.MjModel, mujoco.MjData, np.ndarray, Optional[dict[str, Any]]], Optional[str]]
 ResetFn = Callable[[mujoco.MjModel, mujoco.MjData, bool], None]
 RAD = np.pi / 180.0
-HIP_ANGLE_LIMIT = (-120.0 * RAD, 30.0 * RAD)
+HIP_ANGLE_LIMIT = (-90.0 * RAD, 90.0 * RAD)
 KNEE_ANGLE_LIMIT = (0.0 * RAD, 160.0 * RAD)
 HIP_VEL_LIMIT = 30.0  # rad/s
 KNEE_VEL_LIMIT = 15.0  # rad/s
@@ -116,7 +116,7 @@ def run_simulation(
     if interactive:
         viewer = mujoco.viewer.launch_passive(model, data)
         cam_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_CAMERA, "side_follow")
-        viewer.cam.type = mujoco.mjtCamera.mjCAMERA_FIXED
+        viewer.cam.type = mujoco.mjtCamera.mjCAMERA_FREE
         viewer.cam.fixedcamid = cam_id
         if description:
             print(f"Viewer launched ({description}). Close window to stop.")
@@ -124,18 +124,23 @@ def run_simulation(
     stop_reason = None
     first_violation: Optional[str] = None
     step_count = 0
+    prev_tau_cmd = np.zeros(model.nu, dtype=float)
 
     for step_idx in range(n_steps):
         step_start = time.time()
         ctrl_output = controller(model, data, data.time)
-        print("Control Output at time {:.2f}s: {}".format(data.time, ctrl_output))
+        # print("Control Output at time {:.2f}s: {}".format(data.time, ctrl_output))
         if isinstance(ctrl_output, tuple):
             tau_cmd, info = ctrl_output
         else:
             tau_cmd, info = ctrl_output, None
 
         if tau_cmd is None:
-            tau_cmd = np.zeros(model.nu, dtype=float)
+            tau_cmd = prev_tau_cmd.copy()
+        else:
+            tau_cmd = np.asarray(tau_cmd, dtype=float)
+            prev_tau_cmd = tau_cmd.copy()
+        print("Applied Torques at time {:.2f}s: {}".format(data.time, tau_cmd))
         data.ctrl[:] = tau_cmd
         mujoco.mj_step(model, data)
         step_count += 1
