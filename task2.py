@@ -11,6 +11,7 @@ import numpy as np
 
 from sim_runner import TORQUE_LIMITS, run_simulation
 from sim_runner import get_viewer
+import sim_runner
 import visualization_utils as viz
 import debug_tools
 try:
@@ -27,18 +28,28 @@ MASS_TOTAL = 8 + 2 * 0.25  # 0.2 kg body + 4x0.25 kg legs
 GRAVITY = 9.81
 WEIGHT_FORCE = MASS_TOTAL * GRAVITY
 MU = 0.5  # Changed from 0.5 to match homework
-FZ_MIN = 60.0  # Changed from 0.3 * WEIGHT_FORCE to match homework
-FZ_MAX = 600.0  # Changed from 3.0 * WEIGHT_FORCE to match homework
+FZ_MIN = 0 # Changed from 0.3 * WEIGHT_FORCE to match homework
+FZ_MAX = 10 * WEIGHT_FORCE  # Changed from 3.0 * WEIGHT_FORCE to match homework
 MG_PENALTY_WEIGHT = 1  # Changed from 25.0 to match homework (was 315x too large!)
 DEBUG_QP_FORCES = False
 VERT_AXIS = 2  # MuJoCo's +Z is vertical axis
 
-Kp_root_xz = 100
-Kd_root_xz = 100
-Kp_root_theta = 60
-Kd_root_theta = 600
-Kp_joint = 100.0  # Reduced from 120.0 to reduce oscillations
-Kd_joint = 100.5  # Reduced from 25.0 to reduce oscillations
+Kp_root_x = 0
+Kp_root_z = 15000
+Kd_root_x = 1
+Kd_root_z = 1000
+Kp_root_theta = 3
+Kd_root_theta = 1
+Kp_joint = 6  # Reduced from 120.0 to reduce oscillations
+Kd_joint = 20  # Reduced from 25.0 to reduce oscillations
+# Kp_root_x = 0
+# Kp_root_z = 0
+# Kd_root_x = 0
+# Kd_root_z = 0
+# Kp_root_theta = 0
+# Kd_root_theta = 0
+# Kp_joint = 0  # Reduced from 120.0 to reduce oscillations
+# Kd_joint = 0 # Reduced from 25.0 to reduce oscillations
 
 
 def _fmt_debug(arr: np.ndarray) -> str:
@@ -115,15 +126,15 @@ def solve_contact_qp(
     """
 
     def _clip_force(Fx: float, Fz: float) -> tuple[float, float]:
-        Fz_clipped = np.clip(Fz, FZ_MIN, FZ_MAX)
-        Fx_clipped = np.clip(Fx, -MU * Fz_clipped, MU * Fz_clipped)
+        Fz_clipped = np.clip(Fz, -FZ_MIN, FZ_MAX)
+        Fx_clipped = np.clip(Fx, -MU * abs(Fz_clipped), MU * abs(Fz_clipped))
         return Fx_clipped, Fz_clipped
         
     if not contact_left and not contact_right:
         return np.zeros(4)
 
     # Left-only contact
-    if contact_left and not contact_right:
+    if False and contact_left and not contact_right:
         # Only left foot: G_left is (3,2), F = [Fx_l, Fz_l]
         G_left = G[:, 2:4]
         Q = G_left.T @ G_left + 1e-6 * np.eye(2)
@@ -154,7 +165,7 @@ def solve_contact_qp(
         return np.array([0.0, 0.0, fx_l, fz_l])
 
     # Right-only contact
-    if contact_right and not contact_left:
+    if False and contact_right and not contact_left:
         # Only right foot: G_right is (3,2), F = [Fx_r, Fz_r]
         G_right = G[:, 0:2]
         Q = G_right.T @ G_right + 1e-6 * np.eye(2)
@@ -185,7 +196,7 @@ def solve_contact_qp(
         return np.array([fx_r, fz_r, 0.0, 0.0])
 
     # Both feet in contact (default 4-force problem)
-    Q = G.T @ G + 1e-6 * np.eye(4)
+    Q = G.T @ G + 1e-20 * np.eye(4)
     p = -G.T @ wrench_des
 
     if HAS_CVXOPT:
@@ -210,6 +221,7 @@ def solve_contact_qp(
             h = matrix(np.array([0.0, 0.0, 0.0, 0.0, -FZ_MIN, FZ_MAX, -FZ_MIN, FZ_MAX], dtype=float))
             sol = solvers.qp(P, q, Gc, h)
             F = np.array(sol["x"]).flatten()
+            print("[DEBUG][task2] QP solver succeeded {}", _fmt_debug(F))
             return F
         except Exception:
             pass
@@ -231,7 +243,7 @@ class StandingQPController:
         self.profile = profile
         self._debug_always = True  # Always print debug info for every QP solve
         self._prev_tau: Optional[np.ndarray] = None
-        self._filter_alpha = 0.3  # Low-pass filter coefficient (lower = more smoothing)
+        self._filter_alpha = 0.1  # Low-pass filter coefficient (lower = more smoothing)
         self._contact_history: list[bool] = []
 
         # Logging buffers
@@ -282,26 +294,36 @@ class StandingQPController:
         # --- NEW: Use world trunk pose for base control ---
         trunk_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "body_frame")
         trunk_pos = data.xpos[trunk_id]  # (3,) world position
+        print("[DEBUG][task2] trunk_pos calculation:", _fmt_debug(trunk_pos))
+        debug_tools.draw_world_position(get_viewer(), trunk_pos, np.array([1.0, 1.0, 1.0, 0.1]))
         trunk_mat = data.xmat[trunk_id].reshape(3, 3)  # (3,3) world orientation
-        trunk_vel = data.cvel[trunk_id][:3]  # world linear velocity
-        trunk_angvel = data.cvel[trunk_id][3:]  # world angular velocity
+        trunk_vel = data.cvel[trunk_id][3:]  # world linear velocity
+        # print("[DEBUG][task2] trunk_mat:", _fmt_debug(trunk_mat))
+        print("[DEBUG][task2] trunk_vel calculation:", _fmt_debug(trunk_vel))
+        debug_tools.draw_arrow(
+            get_viewer(),
+            trunk_pos,
+            trunk_pos + trunk_vel * 1,
+            np.array([1.0, 1.0, 1.0, 0.6]),
+        )
+        trunk_angvel = data.cvel[trunk_id][:3]  # world angular velocity
         body_angvel = trunk_mat.T @ trunk_angvel  # body frame angular velocity
         print("[DEBUG][task2] trunk_angvel:", _fmt_debug(trunk_angvel))
         # Desired world pose (standing at origin, upright)
         z_des, zd_des = self.profile.desired_height(t)
-        pos_des = np.array([0.0, z_des, 0.0])  # [x, z, y] (MuJoCo world: x, y, z)
-        vel_des = np.array([0.0, zd_des, 0.0])
+        pos_des = np.array([0.0, 0.0, z_des])  # [x, z, y] (MuJoCo world: x, y, z)
+        vel_des = np.array([0.0, 0.0, zd_des])
         # For orientation, keep upright (identity rotation)
         theta_des = 0.0
         # Only regulate pitch (about world Y)
         # Compute pitch from rotation matrix: theta = atan2(-R[2,0], R[0,0])
         pitch = math.atan2(-trunk_mat[2, 0], trunk_mat[0, 0])
         print("[DEBUG][task2] pitch calculation:", -trunk_mat[2, 0], trunk_mat[0, 0], pitch)
-        pitch_rate = body_angvel[1]  # Approx pitch rate from angvel
-        print("[DEBUG][task2] pitch_rate calculation:", body_angvel[1])
+        pitch_rate = trunk_angvel[1]  # Approx pitch rate from angvel
+        print("[DEBUG][task2] pitch_rate calculation:", trunk_angvel[1])
         # PD for world position (only z)
-        fz_des = Kp_root_xz * (pos_des[1] - trunk_pos[1]) + Kd_root_xz * (vel_des[1] - trunk_vel[1])
-        fx_des = Kp_root_xz * (pos_des[0] - trunk_pos[0]) + Kd_root_xz * (vel_des[0] - trunk_vel[0])
+        fz_des = (Kp_root_z * (pos_des[2] - trunk_pos[2]) + Kd_root_z * (vel_des[2] - trunk_vel[2]))
+        fx_des = (Kp_root_x * (pos_des[0] - trunk_pos[0]) + Kd_root_x * (vel_des[0] - trunk_vel[0]))
         # Visualize debug in MuJoCo viewer
         debug_tools.draw_arrow(
             get_viewer(),
@@ -310,11 +332,11 @@ class StandingQPController:
             np.array([0.0, 1.0, 0.0, 0.6]),
         )
         # PD for pitch
-        tau_theta = Kp_root_theta * (theta_des - pitch) + Kd_root_theta * (0.0 - pitch_rate)
+        tau_theta = -(Kp_root_theta * (theta_des - pitch) + Kd_root_theta * (0.0 - pitch_rate))
         debug_tools.draw_arrow(
             get_viewer(),
             trunk_pos,
-            trunk_pos + np.array([0.0, pitch * 0.01, 0.0]),
+            trunk_pos + np.array([0.0, tau_theta * 0.01, 0.0]),
             np.array([1.0, 0.0, 0.0, 0.6]),
         )
         if debug_this_frame:
@@ -324,7 +346,7 @@ class StandingQPController:
             print(f"[DEBUG][task2] fx_des={fx_des:.4f} fz_des={fz_des:.4f} tau_theta={tau_theta:.4f}")
 
         # Posture tracking for actuated joints (indices 3:7)
-        q_des = [-0.3, 1.5, -0.7, 1.5]  # desired joint positions
+        q_des = [-1.2471975512, 1.0707963268, -0.2, 1.0707963268]  # desired joint positions
         qd_des = np.zeros(4)  # desired joint velocities
         tau_posture = np.zeros(4)
         for i in range(4):
@@ -338,9 +360,7 @@ class StandingQPController:
 
         # Desired trunk wrench: [fx_des, fz_des, tau_theta]
         wrench_des = np.array([fx_des, fz_des, tau_theta])
-        # For floating base: do NOT map to joint torques, pass wrench_des to QP
-        # tau_trunk = J_trunk.T @ wrench_des  # (do not use)
-        # tau_des = tau_trunk - tau_bias  # (do not use)
+        print("[DEBUG][task2] wrench_des calculation:", _fmt_debug(wrench_des))
 
         # Compute foot Jacobians for QP
         jacp_r = np.zeros((3, model.nv))
@@ -406,13 +426,14 @@ class StandingQPController:
         Fz_r = -Fz_r  # MuJoCo frame convention
         Fz_l = -Fz_l  # MuJoCo frame convention
         tau_contact = Jr.T @ np.array([Fx_r, Fz_r]) + Jl.T @ np.array([Fx_l, Fz_l])
-        posture_boost = 0.15 * tau_posture  # Increased from 0.01 for better stability
+        posture_boost = 0.06 * tau_posture  # Increased from 0.01 for better stability
         tau = tau_contact + posture_boost
         tau_raw = tau.copy()
 
         # Apply low-pass filter to smooth torque commands and reduce flickering
         if self._prev_tau is not None and in_contact_any:
-            tau_filtered = self._filter_alpha * tau_raw + (1 - self._filter_alpha) * self._prev_tau
+            # tau_filtered = self._filter_alpha * tau_raw + (1 - self._filter_alpha) * self._prev_tau
+            tau_filtered = tau_raw.copy()
         else:
             tau_filtered = tau_raw
 
@@ -427,7 +448,7 @@ class StandingQPController:
             # joint_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, joint_name)
             # print(data.xpos)
             joint_pos = data.xpos[joint_ids[i]]
-            print(f"[DEBUG][task2] joint {i} ({joint_name}) tau={tau[i]:.4f} id={joint_ids[i]}")
+            # print(f"[DEBUG][task2] joint {i} ({joint_name}) tau={tau[i]:.4f} id={joint_ids[i]}")
             debug_tools.draw_arrow(
                 get_viewer(),
                 joint_pos,

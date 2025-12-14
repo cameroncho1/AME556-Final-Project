@@ -118,3 +118,20 @@ def draw_arrow(viewer: mujoco.viewer.Handle, start: np.ndarray, end: np.ndarray,
         start[0], start[1], start[2],
         end[0], end[1], end[2],
     )
+
+def draw_world_position(
+    viewer: mujoco.viewer.Handle,
+    position: np.ndarray,
+    color: np.ndarray,
+    size: float = 0.06,
+) -> None:
+    """Draw a dot at the world position"""
+    viewer.user_scn.ngeom += 1
+    mujoco.mjv_initGeom(
+        viewer.user_scn.geoms[viewer.user_scn.ngeom - 1],
+        mujoco.mjtGeom.mjGEOM_SPHERE,
+        np.array([size, 0.0, 0.0]),
+        position,
+        np.eye(3).flatten(),
+        color,
+    )

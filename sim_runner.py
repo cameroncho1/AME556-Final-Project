@@ -198,3 +198,24 @@ def run_simulation(
 def get_viewer():
     global _GLOBAL_VIEWER
     return _GLOBAL_VIEWER
+
+def foot_contacts(model: mujoco.MjModel, data: mujoco.MjData) -> tuple[bool, bool]:
+    """Return (left_in_contact, right_in_contact) using body IDs."""
+    floor_body = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "ground_body")
+    right_body = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "right_foot")
+    left_body = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "left_foot")
+    right = left = False
+    for i in range(data.ncon):
+        contact = data.contact[i]
+        geom1 = contact.geom1
+        geom2 = contact.geom2
+        if geom1 < 0 or geom2 < 0:
+            continue
+        body1 = model.geom_bodyid[geom1]
+        body2 = model.geom_bodyid[geom2]
+        bodies = {body1, body2}
+        if right_body in bodies and floor_body in bodies:
+            right = True
+        if left_body in bodies and floor_body in bodies:
+            left = True
+    return left, right
