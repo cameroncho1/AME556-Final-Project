@@ -1,5 +1,9 @@
+
 """Debug visualization tools for MuJoCo simulations."""
 from __future__ import annotations
+def clear_arrows(viewer: mujoco.viewer.Handle) -> None:
+    """Clear all debug arrows from the viewer (call at start of frame)."""
+    viewer.user_scn.ngeom = 0
 
 from typing import Any
 
@@ -88,3 +92,29 @@ def draw_contact_force_arrows(
             left_pos[0], left_pos[1], left_pos[2],
             force_end_l[0], force_end_l[1], force_end_l[2],
         )
+
+def draw_arrow(viewer: mujoco.viewer.Handle, start: np.ndarray, end: np.ndarray, color: np.ndarray) -> None:
+    """Draw a single arrow in the MuJoCo viewer.
+    
+    Args:
+        viewer: MuJoCo viewer handle
+        start: 3D start position of the arrow
+        end: 3D end position of the arrow
+        color: RGBA color of the arrow
+    """
+    viewer.user_scn.ngeom += 1
+    mujoco.mjv_initGeom(
+        viewer.user_scn.geoms[viewer.user_scn.ngeom - 1],
+        mujoco.mjtGeom.mjGEOM_ARROW,
+        np.zeros(3),
+        np.zeros(3),
+        np.zeros(9),
+        color,
+    )
+    mujoco.mjv_makeConnector(
+        viewer.user_scn.geoms[viewer.user_scn.ngeom - 1],
+        mujoco.mjtGeom.mjGEOM_ARROW,
+        0.01,
+        start[0], start[1], start[2],
+        end[0], end[1], end[2],
+    )

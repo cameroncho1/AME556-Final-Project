@@ -1,6 +1,7 @@
-"""Shared MuJoCo simulation utilities for AME556 final project tasks."""
-from __future__ import annotations
 
+from __future__ import annotations
+"""Shared MuJoCo simulation utilities for AME556 final project tasks."""
+_GLOBAL_VIEWER = None
 import os
 import time
 from dataclasses import dataclass
@@ -10,8 +11,8 @@ import mujoco
 import mujoco.viewer
 import numpy as np
 
-from debug_tools import draw_contact_force_arrows
-
+# from debug_tools import draw_contact_force_arrows
+import debug_tools
 HERE = os.path.dirname(os.path.abspath(__file__))
 XML_PATH = os.path.join(HERE, "biped_robot.xml")
 
@@ -90,6 +91,7 @@ def default_reset(model: mujoco.MjModel, data: mujoco.MjData, perturb: bool = Fa
 
 
 def run_simulation(
+        # import debug_tools
     controller: ControllerFn,
     *,
     sim_time: float = 3.0,
@@ -113,10 +115,12 @@ def run_simulation(
 
     dt = model.opt.timestep
     n_steps = int(1e9)  # Effectively infinite steps; run until viewer closed or violation
+    global _GLOBAL_VIEWER
     viewer: Optional[mujoco.viewer.Handle] = None
 
     if interactive:
         viewer = mujoco.viewer.launch_passive(model, data)
+        _GLOBAL_VIEWER = viewer
         cam_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_CAMERA, "side_follow")
         viewer.cam.type = mujoco.mjtCamera.mjCAMERA_FREE
         viewer.cam.fixedcamid = cam_id
@@ -161,9 +165,10 @@ def run_simulation(
             # print(f"[WARNING] Constraint violation ignored at t={data.time:.3f} s: {violation}")
 
         if viewer:
+            # Clear debug arrows at the start of each frame
             # Draw contact force arrows if provided in info
             if info and "contact_forces" in info:
-                draw_contact_force_arrows(viewer, model, data, info)
+                debug_tools.draw_contact_force_arrows(viewer, model, data, info)
             
             viewer.sync()
             time_until_next_step = dt - (time.time() - step_start)
@@ -172,9 +177,12 @@ def run_simulation(
             if not viewer.is_running():
                 stop_reason = "Viewer closed"
                 break
+            
+            debug_tools.clear_arrows(viewer)
 
     if viewer:
         viewer.close()
+        _GLOBAL_VIEWER = None
 
     final_violation = stop_reason or first_violation
 
@@ -186,3 +194,7 @@ def run_simulation(
             print(f"Note: constraint violations occurred but simulation continued (first: {first_violation}).")
 
     return SimResult(final_time=data.time, violation=final_violation, steps=step_count)
+
+def get_viewer():
+    global _GLOBAL_VIEWER
+    return _GLOBAL_VIEWER
