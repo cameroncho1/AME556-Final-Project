@@ -18,24 +18,6 @@ from qp_solver import qp_controller, QPControllerResult
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-# Task-specific PD gains
-# Kp_root_x = 0
-# Kp_root_z = 15000
-# Kd_root_x = 1000
-# Kd_root_z = 1000
-# Kp_root_theta = 3
-# Kd_root_theta = 1
-# Kp_joint = 6  # Reduced from 120.0 to reduce oscillations
-# Kd_joint = 20  # Reduced from 25.0 to reduce oscillations
-# Kp_root_x = 0
-# Kp_root_z = 0
-# Kd_root_x = 0
-# Kd_root_z = 0
-# Kp_root_theta = 0
-# Kd_root_theta = 0
-# Kp_joint = 0  # Reduced from 120.0 to reduce oscillations
-# Kd_joint = 0 # Reduced from 25.0 to reduce oscillations
-
 
 @dataclass
 class HeightProfile:
@@ -134,23 +116,7 @@ class StandingQPController:
         # Extract results from QP controller
         # tau_contact = qp_result.tau_contact
         Fx_r, Fz_r, Fx_l, Fz_l = qp_result.contact_forces
-        # wrench_des = qp_result.wrench_des
-        # G = qp_result.G
-        
-        # Debug visualization
-        # fx_des, fz_des, tau_theta = wrench_des
-        
-        # if debug_this_frame:
-        #     print(f"[DEBUG][task2] trunk_pos={_fmt_debug(trunk_pos)}")
-        #     print(f"[DEBUG][task2] trunk_vel={_fmt_debug(trunk_vel)}")
-        #     print(f"[DEBUG][task2] pitch={pitch:.4f} pitch_rate={pitch_rate:.4f}")
-        #     print(f"[DEBUG][task2] fx_des={fx_des:.4f} fz_des={fz_des:.4f} tau_theta={tau_theta:.4f}")
-        #     print(f"[DEBUG][task2] wrench_des={_fmt_debug(wrench_des)}")
-        #     print(f"[DEBUG][task2] G (grasp matrix)=\n{_fmt_debug(G)}")
-        #     print(f"[DEBUG][task2] contact_forces={_fmt_debug(qp_result.contact_forces)}")
 
-        # Posture tracking for actuated joints (indices 3:7)
-        
         # Logging for plots
         
         trunk_state = get_trunk_state(model, data, "body_frame")
@@ -187,20 +153,6 @@ class StandingQPController:
                 self.renderer.update_scene(data)
                 frame = self.renderer.render()
                 self.video_frames.append((frame * 255).astype(np.uint8))
-
-        # if debug_this_frame:
-        #     print(f"[DEBUG][task2] tau_contact={_fmt_debug(tau_contact)}")
-        #     print(f"[DEBUG][task2] posture_boost={_fmt_debug(posture_boost)}")
-        #     print(f"[DEBUG][task2] tau_raw={_fmt_debug(tau_raw)}")
-        #     print(f"[DEBUG][task2] tau_filtered={_fmt_debug(tau_filtered)}")
-        #     if self._prev_tau is not None:
-        #         print(f"[DEBUG][task2] filter_effect={_fmt_debug(tau_filtered - tau_raw)}")
-        #     print(f"[DEBUG][task2] tau_clipped={_fmt_debug(tau)}")
-        #     print(f"[DEBUG][task2] filter_alpha={self._filter_alpha}")
-        #     print("[DEBUG][task2] ----- frame end -----\n")
-
-        # if not in_contact_any:
-        #     return np.zeros(4), {}
         
         # Return forces for visualization
         return qp_result.tau, {

@@ -140,3 +140,27 @@ def draw_world_position(
         np.eye(3).flatten(),
         color,
     )
+
+def draw_tau(
+    viewer: mujoco.viewer.Handle,
+    data: mujoco.MjData,
+    # sim: Any,
+    tau: np.ndarray,
+) -> None:
+    """Draw joint torque arrows at the joints in the viewer.
+    
+    Args:
+        viewer: MuJoCo viewer handle
+        data: MuJoCo data
+        sim: Simulation object with TORQUE_LIMITS attribute
+        tau: Joint torques to visualize
+    """
+    joint_ids = [3, 4, 6, 7]
+    for i in range(4):
+        joint_pos = data.xpos[joint_ids[i]]
+        draw_arrow(
+            viewer,
+            joint_pos,
+            joint_pos + np.array([0.0, tau[i] * 0.1, 0.0]),
+            np.array([0.0, 0.4, 1.0, 0.6])
+        )

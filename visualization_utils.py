@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 from typing import Optional
 
+# import visualization_utils_walking as viz
 import imageio
 import matplotlib.pyplot as plt
 import mujoco

@@ -24,16 +24,16 @@ MASS_TOTAL = 8 + 2 * 0.25  # 0.2 kg body + 4x0.25 kg legs
 GRAVITY = 9.81
 WEIGHT_FORCE = MASS_TOTAL * GRAVITY
 FZ_MAX = 10 * WEIGHT_FORCE  # Maximum vertical force
-
+POSTURE_RATIO = 1e-3  # Weighting for posture torque regularization
 
 Kp_root_x = 0
 Kp_root_z = 15000
 Kd_root_x = 1000
-Kd_root_z = 1000
-Kp_root_theta = 3
-Kd_root_theta = 1
-Kp_joint = 6  # Reduced from 120.0 to reduce oscillations
-Kd_joint = 20  # Reduced from 25.0 to reduce oscillations
+Kd_root_z = 2000
+Kp_root_theta = 600
+Kd_root_theta = 10
+Kp_joint = 200  # Reduced from 120.0 to reduce oscillations
+Kd_joint = 40  # Reduced from 25.0 to reduce oscillations
 
 
 
@@ -87,7 +87,8 @@ def solve_contact_qp(
         else:
             fx_l, fz_l = np.linalg.lstsq(G_left, wrench_des, rcond=None)[0]
         fx_l, fz_l = _clip_force(fx_l, fz_l)
-        return np.array([0.0, 0.0, fx_l, fz_l])
+        F = -np.array([0.0, 0.0, fx_l, fz_l])
+        return F
 
     # Right-only contact
     if contact_right and not contact_left:
@@ -117,7 +118,8 @@ def solve_contact_qp(
         else:
             fx_r, fz_r = np.linalg.lstsq(G_right, wrench_des, rcond=None)[0]
         fx_r, fz_r = _clip_force(fx_r, fz_r)
-        return np.array([fx_r, fz_r, 0.0, 0.0])
+        F = -np.array([fx_r, fz_r, 0.0, 0.0])
+        return F
 
     # Both feet in contact (default 4-force problem)
     Q = G.T @ G + 1e-20 * np.eye(4)
@@ -144,7 +146,7 @@ def solve_contact_qp(
             )
             h = matrix(np.array([0.0, 0.0, 0.0, 0.0, -FZ_MIN, FZ_MAX, -FZ_MIN, FZ_MAX], dtype=float))
             sol = solvers.qp(P, q, Gc, h)
-            F = np.array(sol["x"]).flatten()
+            F = -np.array(sol["x"]).flatten()
             return F
         except Exception:
             pass
@@ -156,7 +158,8 @@ def solve_contact_qp(
     Fx_r, Fz_r, Fx_l, Fz_l = F_ls[:4]
     Fx_r, Fz_r = _clip_force(Fx_r, Fz_r)
     Fx_l, Fz_l = _clip_force(Fx_l, Fz_l)
-    return np.array([Fx_r, Fz_r, Fx_l, Fz_l])
+    F = -np.array([Fx_r, Fz_r, Fx_l, Fz_l])
+    return F
 
 
 # Default PD gains (can be overridden)
@@ -210,17 +213,6 @@ def qp_controller(
     
     # Track contact stability (per-foot)
     contact_left, contact_right = foot_contacts(model, data)
-    # in_contact_any = left_contact or right_contact
-    # self._contact_history.append(in_contact_any)
-    # if len(self._contact_history) > 10:
-    #     self._contact_history.pop(0)
-    # debug_this_frame = self._debug_always and in_contact_any
-    # if debug_this_frame:
-    #     print("\n[DEBUG][task2] ----- frame start -----")
-    #     print(f"[DEBUG][task2] sim_time={t:.4f}s")
-    #     print(f"[DEBUG][task2] contact_left={left_contact} contact_right={right_contact}")
-    #     print(f"[DEBUG][task2] contact_history={self._contact_history[-5:]}")
-
 
     # Get trunk state using helper function
     trunk_state = sim.get_trunk_state(model, data, "body_frame")
@@ -231,23 +223,23 @@ def qp_controller(
     pitch_rate = trunk_state.thetad
     
     # Debug visualization
-    print("[DEBUG][task2] trunk_pos calculation:", debug._fmt_debug(trunk_pos))
+    # print("[DEBUG][task2] trunk_pos calculation:", debug._fmt_debug(trunk_pos))
     debug.draw_world_position(sim.get_viewer(), trunk_pos, np.array([1.0, 1.0, 1.0, 0.1]))
-    print("[DEBUG][task2] trunk_vel calculation:", debug._fmt_debug(trunk_vel))
+    # print("[DEBUG][task2] trunk_vel calculation:", debug._fmt_debug(trunk_vel))
     debug.draw_arrow(
         sim.get_viewer(),
         trunk_pos,
         trunk_pos + trunk_vel * 1,
         np.array([1.0, 1.0, 1.0, 0.6]),
     )
-    print("[DEBUG][task2] trunk_angvel:", debug._fmt_debug(trunk_angvel))
-    print("[DEBUG][task2] pitch calculation:", pitch)
-    print("[DEBUG][task2] pitch_rate calculation:", pitch_rate)
+    # print("[DEBUG][task2] trunk_angvel:", debug._fmt_debug(trunk_angvel))
+    # print("[DEBUG][task2] pitch calculation:", pitch)
+    # print("[DEBUG][task2] pitch_rate calculation:", pitch_rate)
 
     # PD control for root position
     fz_des = Kp_root_z * (pos_des[2] - trunk_pos[2]) + Kd_root_z * (vel_des[2] - trunk_vel[2])
     fx_des = Kp_root_x * (pos_des[0] - trunk_pos[0]) + Kd_root_x * (vel_des[0] - trunk_vel[0])
-    print("[DEBUG][task2] fx_des calculation: {:.4f}  fz_des calculation: {:.4f}".format(fx_des, fz_des))
+    # print("[DEBUG][qp_solver] fx_des calculation: {:.4f}  fz_des calculation: {:.4f}".format(fx_des, fz_des))
     # PD control for pitch
     tau_theta = -(Kp_root_theta * (theta_des - pitch) + Kd_root_theta * (0.0 - pitch_rate))
     debug.draw_arrow(
@@ -303,14 +295,15 @@ def qp_controller(
     
     # Solve QP for contact forces
     F = solve_contact_qp(G, wrench_des, contact_left, contact_right)
-    
-    # Convert forces to torques (MuJoCo frame convention: negate forces)
+    # F = -F  # Negate to convert to MuJoCo frame convention
     Fx_r, Fz_r, Fx_l, Fz_l = F
-    Fx_r = -Fx_r
-    Fx_l = -Fx_l
-    Fz_r = -Fz_r
-    Fz_l = -Fz_l
-    
+    info = {"contact_forces": np.array([Fx_r, Fz_r, Fx_l, Fz_l]), "right_contact": contact_right, "left_contact": contact_left}
+    debug.draw_contact_force_arrows(
+        sim.get_viewer(),
+        model,
+        data,
+        info
+    )
     # Compute contact torques from forces
     tau_contact = Jr.T @ np.array([Fx_r, Fz_r]) + Jl.T @ np.array([Fx_l, Fz_l])
     
@@ -328,7 +321,7 @@ def qp_controller(
     
     # if debug_this_frame:
     #     print(f"[DEBUG][task2] tau_bias={_fmt_debug(tau_bias)}")
-    posture_boost = 0.06 * tau_posture  # Increased from 0.01 for better stability
+    posture_boost = POSTURE_RATIO * tau_posture  # Increased from 0.01 for better stability
     tau = tau_contact + posture_boost
     tau_raw = tau.copy()
 
@@ -344,15 +337,16 @@ def qp_controller(
     tau = np.clip(tau_raw, -sim.TORQUE_LIMITS, sim.TORQUE_LIMITS)
 
     # Debug draw tau
-    joint_ids = [3, 4, 6, 7]
-    for i in range(4):
-        joint_pos = data.xpos[joint_ids[i]]
-        debug.draw_arrow(
-            sim.get_viewer(),
-            joint_pos,
-            joint_pos + np.array([0.0, tau[i] * 0.01, 0.0]),
-            np.array([0.0, 0.4, 1.0, 0.6]),
-        )
+    if(False):
+        joint_ids = [3, 4, 6, 7]
+        for i in range(4):
+            joint_pos = data.xpos[joint_ids[i]]
+            debug.draw_arrow(
+                sim.get_viewer(),
+                joint_pos,
+                joint_pos + np.array([0.0, tau[i] * 0.1, 0.0]),
+                np.array([0.0, 0.4, 1.0, 0.6]),
+            )
 
     return QPControllerResult(
         tau,
