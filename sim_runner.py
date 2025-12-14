@@ -10,6 +10,8 @@ import mujoco
 import mujoco.viewer
 import numpy as np
 
+from debug_tools import draw_contact_force_arrows
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 XML_PATH = os.path.join(HERE, "biped_robot.xml")
 
@@ -110,7 +112,7 @@ def run_simulation(
     (reset_fn or default_reset)(model, data, perturb)
 
     dt = model.opt.timestep
-    n_steps = int(sim_time / dt)
+    n_steps = int(1e9)  # Effectively infinite steps; run until viewer closed or violation
     viewer: Optional[mujoco.viewer.Handle] = None
 
     if interactive:
@@ -156,9 +158,13 @@ def run_simulation(
                 break
             if first_violation is None:
                 first_violation = f"t={data.time:.3f} s: {violation}"
-            print(f"[WARNING] Constraint violation ignored at t={data.time:.3f} s: {violation}")
+            # print(f"[WARNING] Constraint violation ignored at t={data.time:.3f} s: {violation}")
 
         if viewer:
+            # Draw contact force arrows if provided in info
+            if info and "contact_forces" in info:
+                draw_contact_force_arrows(viewer, model, data, info)
+            
             viewer.sync()
             time_until_next_step = dt - (time.time() - step_start)
             if time_until_next_step > 0:

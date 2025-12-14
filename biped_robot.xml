@@ -25,8 +25,11 @@
                     <joint name = "q2" pos = "0 0 0 " type = "hinge" axis = "0 1 0"/>
                     <inertial mass = "0.25" diaginertia="0.001008 1e-6 0.001008" pos = "0 0 -.11 "/>
                     <geom type = "capsule" fromto = "0 .01 0 0 .01 -0.22" size = ".02"/>
-                </body>
-            </body>    
+                    <body name="left_foot" pos="0 .01 -0.22">
+                        <geom name="left_foot_geom" type="sphere" size="0.03" pos="0 0 0" rgba="0 0 1 1"/>
+                    </body>
+                </body> 
+            </body>
 
             <!-- right leg -->
             <body name = "right_thigh" pos = "0 -0.04 -0.125" >
@@ -37,6 +40,9 @@
                     <joint name = "q4" pos = "0 0 0 " type = "hinge" axis = "0 1 0"/>
                     <inertial mass = "0.25" diaginertia="0.001008 1e-6 0.001008" pos = "0 0 -.11 "/>
                     <geom type = "capsule" fromto = "0 -.01 0 0 -.01 -0.22" size = ".02"/>
+                    <body name="right_foot" pos="0 -.01 -0.22">
+                        <geom name="right_foot_geom" type="sphere" size="0.03" pos="0 0 0" rgba="1 0 0 1"/>
+                    </body>
                 </body>
             </body>              
         </body> 

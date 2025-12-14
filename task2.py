@@ -27,42 +27,18 @@ MASS_TOTAL = 8 + 4 * 0.25  # 0.2 kg body + 4x0.25 kg legs
 GRAVITY = 9.81
 WEIGHT_FORCE = MASS_TOTAL * GRAVITY
 MU = 0.5  # Changed from 0.5 to match homework
-FZ_MIN = 6.0  # Changed from 0.3 * WEIGHT_FORCE to match homework
-FZ_MAX = 10.0  # Changed from 3.0 * WEIGHT_FORCE to match homework
+FZ_MIN = 60.0  # Changed from 0.3 * WEIGHT_FORCE to match homework
+FZ_MAX = 200.0  # Changed from 3.0 * WEIGHT_FORCE to match homework
 MG_PENALTY_WEIGHT = 1  # Changed from 25.0 to match homework (was 315x too large!)
 DEBUG_QP_FORCES = False
 VERT_AXIS = 2  # MuJoCo's +Z is vertical axis
 
 Kp_root_xz = 120
 Kd_root_xz = 10
-Kp_root_theta = 1200.0
+Kp_root_theta = 120.0
 Kd_root_theta = 10.0
 Kp_joint = 120.0  # Reduced from 120.0 to reduce oscillations
 Kd_joint = 10.5  # Reduced from 25.0 to reduce oscillations
-
-# Walking parameters
-STEP_LENGTH = 0.08  # meters of forward step target (heuristic)
-STEP_HEIGHT = 0.04  # meters of swing foot lift (approximated via joint offsets)
-STEP_KNEE_BEND = 0.35  # rad knee flex during swing
-PHASE_DURATIONS = {
-    "double1": 0.4,
-    "left_stance": 0.4,
-    "double2": 0.4,
-    "right_stance": 0.4,
-}
-
-
-def phase_schedule(t: float) -> tuple[str, float, float]:
-    """Return (phase_name, t_in_phase, phase_duration) for a simple scripted gait."""
-    t_mod = t % sum(PHASE_DURATIONS.values())
-    accum = 0.0
-    for name, dur in PHASE_DURATIONS.items():
-        if t_mod < accum + dur:
-            return name, t_mod - accum, dur
-        accum += dur
-    # Fallback
-    last_name = list(PHASE_DURATIONS.keys())[-1]
-    return last_name, t_mod - accum, PHASE_DURATIONS[last_name]
 
 
 def _fmt_debug(arr: np.ndarray) -> str:
@@ -107,8 +83,8 @@ class HeightProfile:
 def foot_contacts(model: mujoco.MjModel, data: mujoco.MjData) -> tuple[bool, bool]:
     """Return (left_in_contact, right_in_contact) using body IDs."""
     floor_body = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "ground_body")
-    right_body = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "right_shin")
-    left_body = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "left_shin")
+    right_body = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "right_foot")
+    left_body = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "left_foot")
     right = left = False
     for i in range(data.ncon):
         contact = data.contact[i]
@@ -153,7 +129,7 @@ def solve_contact_qp(
         return np.zeros(4)
 
     # Left-only contact
-    if contact_left and not contact_right:
+    if False and contact_left and not contact_right:
         A = Jl.T  # (4x2)
         Q = A.T @ A + 1e-6 * np.eye(2)
         p = -A.T @ tau_des + weight * np.array([0.0, -f_vert_target])
@@ -183,7 +159,7 @@ def solve_contact_qp(
         return np.array([0.0, 0.0, fx_l, fz_l])
 
     # Right-only contact
-    if contact_right and not contact_left:
+    if False and contact_right and not contact_left:
         A = Jr.T  # (4x2)
         Q = A.T @ A + 1e-6 * np.eye(2)
         p = -A.T @ tau_des + weight * np.array([0.0, -f_vert_target])
@@ -218,8 +194,13 @@ def solve_contact_qp(
     A[:, 2:4] = Jl.T
     Q = A.T @ A + 1e-6 * np.eye(4)
     p = -A.T @ tau_des
-    Q += weight * np.outer(v, v)
-    p += -weight * f_vert_target * v
+    
+    # Enforce vertical force equality: Fz_r + Fz_l = mg + f_vert_des
+    # This makes height control work through forces instead of posture
+    v_eq = np.array([0.0, 1.0, 0.0, 1.0])  # picks out Fz_r and Fz_l
+    weight_eq = 1000.0  # Strong penalty for equality constraint
+    Q += weight_eq * np.outer(v_eq, v_eq)
+    p += -weight_eq * f_vert_target * v_eq
 
     if HAS_CVXOPT:
         try:
@@ -256,11 +237,10 @@ def solve_contact_qp(
 class StandingQPController:
     def __init__(self, profile: HeightProfile, debug_frames: int = 0):
         self.profile = profile
-        self._debug_frames_remaining = max(0, int(debug_frames))
+        self._debug_always = True  # Always print debug info for every QP solve
         self._prev_tau: Optional[np.ndarray] = None
         self._filter_alpha = 0.3  # Low-pass filter coefficient (lower = more smoothing)
         self._contact_history: list[bool] = []
-        self._q_des: Optional[np.ndarray] = None  # Desired joint pose captured from initial state
 
         # Logging buffers
         self.log_time: list[float] = []
@@ -293,30 +273,17 @@ class StandingQPController:
             self.recording_enabled = False
 
     def __call__(self, model: mujoco.MjModel, data: mujoco.MjData, t: float):
-        phase, t_phase, phase_dur = phase_schedule(t)
         # Track contact stability (per-foot)
         left_contact, right_contact = foot_contacts(model, data)
-        # Stance selection from phase (scripted gait); fall back to sensed contacts if both lost
-        if phase == "left_stance":
-            stance_left, stance_right = True, False
-        elif phase == "right_stance":
-            stance_left, stance_right = False, True
-        else:  # double support
-            stance_left, stance_right = True, True
-
-        in_contact_any = stance_left or stance_right
+        in_contact_any = left_contact or right_contact
         self._contact_history.append(in_contact_any)
         if len(self._contact_history) > 10:
             self._contact_history.pop(0)
-        debug_this_frame = False
-        if self._debug_frames_remaining > 0:
-            debug_this_frame = True
-            self._debug_frames_remaining -= 1
+        debug_this_frame = self._debug_always and in_contact_any
+        if debug_this_frame:
             print("\n[DEBUG][task2] ----- frame start -----")
             print(f"[DEBUG][task2] sim_time={t:.4f}s")
-            print(f"[DEBUG][task2] phase={phase} t_phase={t_phase:.3f}/{phase_dur:.3f}")
             print(f"[DEBUG][task2] contact_left={left_contact} contact_right={right_contact}")
-            print(f"[DEBUG][task2] stance_left={stance_left} stance_right={stance_right}")
             print(f"[DEBUG][task2] contact_history={self._contact_history[-5:]}")
 
         x = data.qpos[0]
@@ -347,32 +314,8 @@ class StandingQPController:
             print(f"[DEBUG][task2] desired_height={z_des:.4f} desired_height_vel={zd_des:.4f}")
             print(f"[DEBUG][task2] fx_des={fx_des:.4f} f_vert_des={f_vert_des:.4f} tau_theta={tau_theta:.4f}")
 
-        # Capture desired joint pose from the initial state to avoid hardcoding
-        if self._q_des is None:
-            self._q_des = data.qpos[3:7].copy()
-        q_des = self._q_des.copy()
-
-        # Swing leg shaping (very simple joint-space offsets)
-        def swing_offsets(progress: float) -> tuple[float, float]:
-            # progress in [0,1]
-            hip_off = STEP_LENGTH * (progress - 0.5) * 0.5  # small fore-aft hip swing (rad approx)
-            knee_off = STEP_KNEE_BEND * math.sin(math.pi * progress)
-            return hip_off, knee_off
-
-        if phase == "left_stance":
-            prog = max(0.0, min(1.0, t_phase / phase_dur))
-            hip_off, knee_off = swing_offsets(prog)
-            # Right leg is swing: joints 0,1
-            q_des[0] += hip_off
-            q_des[1] += knee_off
-        elif phase == "right_stance":
-            prog = max(0.0, min(1.0, t_phase / phase_dur))
-            hip_off, knee_off = swing_offsets(prog)
-            # Left leg is swing: joints 2,3
-            q_des[2] += hip_off
-            q_des[3] += knee_off
-
-        tau_posture = Kp_joint * (q_des - q) - Kd_joint * qd
+        # Use only gravity compensation for posture, no tracking
+        tau_posture = np.zeros(4)
 
         tau_bias = data.qfrc_bias[3:7].copy()
         # Note: trunk Jacobian is zero for floating base (no actuation path from joints to trunk)
@@ -391,7 +334,6 @@ class StandingQPController:
         tau_des = tau_task - tau_bias
 
         if debug_this_frame:
-            print(f"[DEBUG][task2] q_des={_fmt_debug(q_des)}")
             print(f"[DEBUG][task2] tau_posture={_fmt_debug(tau_posture)}")
             print(f"[DEBUG][task2] tau_bias={_fmt_debug(tau_bias)}")
             print(f"[DEBUG][task2] trunk_jacobian=\n{_fmt_debug(J_trunk)}")
@@ -401,8 +343,8 @@ class StandingQPController:
         jacp_r = np.zeros((3, model.nv))
         jacp_l = np.zeros((3, model.nv))
         jacr_tmp = np.zeros((3, model.nv))
-        right_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "right_shin")
-        left_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "left_shin")
+        right_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "right_foot")
+        left_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "left_foot")
         mujoco.mj_jacBody(model, data, jacp_r, jacr_tmp, right_id)
         mujoco.mj_jacBody(model, data, jacp_l, jacr_tmp, left_id)
         # Note: Jr vertical row may be near-zero at nominal pose (leg extended vertically)
@@ -418,13 +360,17 @@ class StandingQPController:
             Jl,
             tau_des,
             f_vert_des,
-            contact_left=stance_left,
-            contact_right=stance_right,
+            contact_left=left_contact,
+            contact_right=right_contact,
         )
         if debug_this_frame:
             print(f"[DEBUG][task2] contact_forces={_fmt_debug(F)}")
             print(f"[DEBUG][task2] f_vert_target={WEIGHT_FORCE + f_vert_des:.4f} (mg + f_vert_des)")
         Fx_r, Fy_r, Fx_l, Fy_l = F
+        Fx_r = -Fx_r  # MuJoCo frame convention
+        Fx_l = -Fx_l  # MuJoCo frame convention
+        Fy_r = -Fy_r  # MuJoCo frame convention
+        Fy_l = -Fy_l  # MuJoCo frame convention
         tau_contact = Jr.T @ np.array([Fx_r, Fy_r]) + Jl.T @ np.array([Fx_l, Fy_l])
         posture_boost = 0.15 * tau_posture  # Increased from 0.01 for better stability
         tau = tau_contact + posture_boost
@@ -479,7 +425,14 @@ class StandingQPController:
 
         if not in_contact_any:
             return np.zeros(4), {}
-        return tau, {"raw_tau": tau_raw}
+        
+        # Return forces for visualization
+        return tau, {
+            "raw_tau": tau_raw,
+            "contact_forces": F,
+            "right_contact": right_contact,
+            "left_contact": left_contact,
+        }
 
     def save_plots(self, output_dir: Optional[str] = None) -> None:
         """Save diagnostic plots using visualization utility."""
