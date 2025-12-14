@@ -27,7 +27,7 @@ KNEE_VEL_LIMIT = 15.0  # rad/s
 HIP_TORQUE_LIMIT = 30.0  # Nm
 KNEE_TORQUE_LIMIT = 60.0  # Nm
 TORQUE_LIMITS = np.array([HIP_TORQUE_LIMIT, KNEE_TORQUE_LIMIT, HIP_TORQUE_LIMIT, KNEE_TORQUE_LIMIT])
-
+MU = 0.5  # Friction coefficient
 
 def _in_range(val: float, low: float, high: float) -> bool:
     return low <= val <= high
@@ -219,3 +219,47 @@ def foot_contacts(model: mujoco.MjModel, data: mujoco.MjData) -> tuple[bool, boo
         if left_body in bodies and floor_body in bodies:
             left = True
     return left, right
+
+
+@dataclass
+class TrunkState:
+    """Trunk state: position (x, z), orientation (theta), and velocities."""
+    x: float
+    z: float
+    theta: float  # pitch angle about world Y axis
+    xd: float  # x velocity
+    zd: float  # z velocity
+    thetad: float  # pitch rate
+    pos: np.ndarray  # (3,) world position
+    vel: np.ndarray  # (3,) world linear velocity
+    angvel: np.ndarray  # (3,) world angular velocity
+
+
+def get_trunk_state(model: mujoco.MjModel, data: mujoco.MjData, body_name: str = "body_frame") -> TrunkState:
+    """Extract trunk state (x, z, theta and velocities) from MuJoCo simulation.
+    
+    Returns TrunkState with position, orientation, and velocities.
+    """
+    import math
+    trunk_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, body_name)
+    trunk_pos = data.xpos[trunk_id].copy()  # (3,) world position
+    trunk_mat = data.xmat[trunk_id].reshape(3, 3)  # (3,3) world orientation
+    trunk_vel = data.cvel[trunk_id][3:].copy()  # world linear velocity
+    trunk_angvel = data.cvel[trunk_id][:3].copy()  # world angular velocity
+    
+    # Extract x, z, theta
+    x = trunk_pos[0]
+    z = trunk_pos[2]
+    # Compute pitch from rotation matrix: theta = atan2(-R[2,0], R[0,0])
+    theta = math.atan2(-trunk_mat[2, 0], trunk_mat[0, 0])
+    
+    # Extract velocities
+    xd = trunk_vel[0]
+    zd = trunk_vel[2]
+    thetad = trunk_angvel[1]  # pitch rate (about Y axis)
+    
+    return TrunkState(
+        x=x, z=z, theta=theta,
+        xd=xd, zd=zd, thetad=thetad,
+        pos=trunk_pos, vel=trunk_vel, angvel=trunk_angvel
+    )

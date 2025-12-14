@@ -11,6 +11,11 @@ import mujoco
 import mujoco.viewer
 import numpy as np
 
+def _fmt_debug(arr: np.ndarray) -> str:
+    """Format numpy arrays for concise debug output."""
+    return np.array2string(np.asarray(arr, dtype=float), precision=4, suppress_small=False)
+
+
 
 def draw_contact_force_arrows(
     viewer: mujoco.viewer.Handle,
