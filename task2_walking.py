@@ -16,12 +16,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 @dataclass
 class WalkingProfile:
-    speed: float = 0.5  # m/s
+    speed: float = 0  # m/s
     direction: int = 1  # 1 for forward, -1 for backward
     sim_time: float = 6.0
-    step_length: float = 0.25
-    step_time: float = 0.5
-    horizon: int = 10
+    step_length: float = 0.1
+    step_time: float = .01
+    horizon: int = 2
 
 class WalkingMPCController:
     def __init__(self, profile: WalkingProfile, debug_frames: int = 0):
@@ -59,10 +59,12 @@ class WalkingMPCController:
 
     def __call__(self, model: mujoco.MjModel, data: mujoco.MjData, t: float):
         # Desired world pose (walking at speed)
-        x_des = self.profile.speed * t * self.profile.direction
+        # x_des = self.profile.speed * t * self.profile.direction
+        x_des = 0.0
         z_des = 0.45
         pos_des = np.array([x_des, 0.0, z_des])
-        vel_des = np.array([self.profile.speed * self.profile.direction, 0.0, 0.0])
+        # vel_des = np.array([self.profile.speed * self.profile.direction, 0.0, 0.0])
+        vel_des = np.array([0.0, 0.0, 0.0])
         theta_des = 0.0
         # q_des = [-1.2471975512, 1.0707963268, -0.2, 1.0707963268]
         q_des = np.array([-0.5, 1.0, -0.5, 1.0])
@@ -107,6 +109,7 @@ class WalkingMPCController:
                 self.renderer.update_scene(data)
                 frame = self.renderer.render()
                 self.video_frames.append((frame * 255).astype(np.uint8))
+        print(f"[DEBUG][task2_walking] tau = {qp_result.tau}")
         return qp_result.tau, {}
 
     def save_plots(self, output_dir: Optional[str] = None) -> None:

@@ -51,7 +51,7 @@ def draw_contact_force_arrows(
     left_pos = data.xpos[left_id].copy()
     
     # Scale factor for visualization
-    force_scale = 0.003
+    force_scale = 0.006
     
     # Draw right foot force arrow
     if right_contact and (abs(Fx_r) > 0.1 or abs(Fz_r) > 0.1):
@@ -161,6 +161,6 @@ def draw_tau(
         draw_arrow(
             viewer,
             joint_pos,
-            joint_pos + np.array([0.0, tau[i] * 0.1, 0.0]),
+            joint_pos + np.array([0.0, tau[i] * 1, 0.0]),
             np.array([0.0, 0.4, 1.0, 0.6])
         )

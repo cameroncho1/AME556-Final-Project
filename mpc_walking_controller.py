@@ -9,10 +9,12 @@ from qp_solver import qp_controller, QPControllerResult
 import sim_runner as sim
 # import visualization_utils as viz
 # PD gains for swing foot
-Kp_swing_x = 1
-Kp_swing_z = 100
-Kd_swing_x = 1
-Kd_swing_z = 1
+# Kp_swing_x = 100
+Kp_swing_x = 0
+Kd_swing_x = 0
+# Kp_swing_z = 100
+Kp_swing_z = 0
+Kd_swing_z = 0
 
 
 # --- Simple horizon-based MPC for footstep planning ---
@@ -36,7 +38,7 @@ class MPCFootstepPlanner:
         v0 = trunk_vel[0]
         N = self.horizon
         dt = self.step_time
-        v_des = v0 * direction
+        v_des = self.v_des * direction
         # Decision variables: footstep locations f[0],...,f[N-1]
         # Cost: sum (f_k - (x0 + v0*(k+1)*dt))^2 + alpha*(f_k - f_{k-1} - step_length_nom)^2
         alpha = 1.0
@@ -119,7 +121,7 @@ def mpc_walking_controller(
         stance_curr = left_pos
         swing_idx = 0  # right foot
 
-    swing_des[2] = 0.1
+    swing_des[2] = 0.4
     #calcualte the q_des
     # q_des_swing = q_des.copy()
     # if swing_foot == 'left':
@@ -140,48 +142,73 @@ def mpc_walking_controller(
     if True:
         # QP for stance, PD for swing
         qp_result = qp_controller(
-            model, data, pos_des, vel_des, theta_des, q_des, qd_des
+            model, data, pos_des, vel_des, theta_des, q_des, qd_des, 
+            left_enable=(swing_foot != 'left'),
+            right_enable=(swing_foot != 'right')
+            # left_enable=True,
+            # right_enable=True
         )
         tau = qp_result.tau.copy()
+        # tau = np.zeros(4)  # 4 joints: [hip_R, knee_R, hip_L, knee_L]
         # PD in world frame for swing foot
         swing_err = swing_des - swing_curr
         swing_des_c = swing_des.copy()
-        swing_des_c[2] = abs(swing_err[0])
+        swing_des_c[2] = .2 * abs(swing_err[0])
         swing_err_c = swing_des_c - swing_curr
-        swing_vel = data.cvel[model.body(swing_foot+"_foot").id][:3]
+        swing_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, swing_foot+"_foot")
+        swing_vel = data.cvel[swing_id][3:]
+        # print(f"[DEBUG][MPC] swing_foot: {swing_foot}, swing_des: {swing_des}, swing_curr: {swing_curr}, swing_err: {swing_err}, swing_vel: {swing_vel}")
+        # print(f"[DEBUG][MPC] swing_err_c: {swing_err_c}")
+        # print(f"[DEBUG][MPC] swing_vel: {swing_vel}")
+        # print(f"[DEBUG][MPC] before swing tau: {tau}")
+        # print(f"[DEBUG][MPC] qp_result.tau: {qp_result.tau}")
         # swing_force = (Kp_swing * swing_err_c - Kd_swing * swing_vel)
-        swing_force_x = Kp_swing_x * swing_err_c[0] - Kd_swing_x * swing_vel[0]
+        swing_force_x = (Kp_swing_x * swing_err_c[0] - Kd_swing_x * swing_vel[0])
         swing_force_z = (Kp_swing_z * swing_err_c[2] - Kd_swing_z * swing_vel[2])
         debug.draw_arrow(
             sim.get_viewer(), swing_curr,
-            swing_curr + np.array([swing_force_x, 0.0, swing_force_z]),
+            swing_curr + np.array([-swing_force_x, 0.0, -swing_force_z]),
             np.array([1.0,0.5,0.0,0.7])
         )
         
         # Map to joint torques (simple Jacobian transpose)
-        jacp = np.zeros((3, model.nv))
+    # Compute foot Jacobians for QP
+        jacp_r = np.zeros((3, model.nv))
+        jacp_l = np.zeros((3, model.nv))
         jacr_tmp = np.zeros((3, model.nv))
+        right_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "right_foot")
+        left_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "left_foot")
+        mujoco.mj_jacBody(model, data, jacp_r, jacr_tmp, right_id)
+        mujoco.mj_jacBody(model, data, jacp_l, jacr_tmp, left_id)
+        Jr = np.vstack([jacp_r[0, 3:7], jacp_r[2, 3:7]])
+        Jl = np.vstack([jacp_l[0, 3:7], jacp_l[2, 3:7]])
+
         swing_body_id = left_id if swing_foot=='left' else right_id
-        mujoco.mj_jacBody(model, data, jacp, jacr_tmp, swing_body_id)
+        # mujoco.mj_jacBody(model, data, jacp, jacr_tmp, swing_body_id)
         swing_foot_pos = data.xpos[swing_body_id].copy()
         debug.draw_world_position(sim.get_viewer(), swing_foot_pos, np.array([1.0,1.0,0.0,0.7]))
         # debug.draw_world_position(sim.get_viewer(), swing_des, np.array([0.0,1.0,1.0,0.7]))
         # Assign swing torques to correct joint indices
         if swing_foot == 'left':
             # tau[0:2] += jacp[:2,0:2].T @ swing_force[:2]  # left hip, knee
-            tau[0:2] += jacp[:2,0:2].T @ np.array([swing_force_x, swing_force_z])  # left hip, knee
-        else:
+            tau += Jl.T @ np.array([-swing_force_x, -swing_force_z])  # left hip, knee    
+            print(f"[DEBUG][MPC] left tau after PD swing: {tau}")
+            pass
+        
+        elif swing_foot == 'right':
             # tau[2:4] += jacp[:2,2:4].T @ swing_force[:2]  # right hip, knee
-            tau[2:4] += jacp[:2,2:4].T @ np.array([swing_force_x, swing_force_z])  # right hip, knee
+            tau += Jr.T @ np.array([-swing_force_x, -swing_force_z])  # right hip, knee
+            print(f"[DEBUG][MPC] right tau after PD swing: {tau}")
+            pass
         # Debug draw
-        debug.draw_arrow(
-            sim.get_viewer(), swing_curr, swing_des, np.array([1.0,0.5,0.0,0.7])
-        )
+        # debug.draw_arrow(
+        #     sim.get_viewer(), swing_curr, swing_des, np.array([1.0,0.5,0.0,0.7])
+        # )
 
     # Debug draw footsteps
-    for f in planner.footsteps:
-        debug.draw_world_position(sim.get_viewer(), f, np.array([0.0,1.0,0.0,0.3]))
-    debug.draw_world_position(sim.get_viewer(), swing_des, np.array([1.0,0.0,0.0,0.7]))
+    # for f in planner.footsteps:
+    #     debug.draw_world_position(sim.get_viewer(), f, np.array([0.0,1.0,0.0,0.3]))
+    debug.draw_world_position(sim.get_viewer(), swing_des_c, np.array([1.0,0.0,0.0,0.7]))
 
     # Clip to torque limits
     tau = np.clip(tau, -TORQUE_LIMITS, TORQUE_LIMITS)

@@ -24,16 +24,16 @@ MASS_TOTAL = 8 + 2 * 0.25  # 0.2 kg body + 4x0.25 kg legs
 GRAVITY = 9.81
 WEIGHT_FORCE = MASS_TOTAL * GRAVITY
 FZ_MAX = 10 * WEIGHT_FORCE  # Maximum vertical force
-POSTURE_RATIO = 1e-3  # Weighting for posture torque regularization
+POSTURE_RATIO = 6e-4  # Weighting for posture torque regularization
 
 Kp_root_x = 0
-Kp_root_z = 15000
 Kd_root_x = 1000
-Kd_root_z = 2000
-Kp_root_theta = 600
-Kd_root_theta = 10
-Kp_joint = 200  # Reduced from 120.0 to reduce oscillations
-Kd_joint = 40  # Reduced from 25.0 to reduce oscillations
+Kp_root_z = 16000
+Kd_root_z = 400
+Kp_root_theta = 300
+Kd_root_theta = 20
+Kp_joint = 4000  # Reduced from 120.0 to reduce oscillations
+Kd_joint = 200  # Reduced from 25.0 to reduce oscillations
 
 
 
@@ -57,12 +57,13 @@ def solve_contact_qp(
         return Fx_clipped, Fz_clipped
     
     if not contact_left and not contact_right:
+        print("[WARN][qp_solver] No contacts detected; returning zero forces.")
         return np.zeros(4)
 
     # Left-only contact
     if contact_left and not contact_right:
         G_left = G[:, 2:4]
-        Q = G_left.T @ G_left + 1e-6 * np.eye(2)
+        Q = G_left.T @ G_left + 1e-20 * np.eye(2)
         p = -G_left.T @ wrench_des
         if HAS_CVXOPT:
             try:
@@ -82,6 +83,7 @@ def solve_contact_qp(
                 h = matrix(np.array([0.0, 0.0, -FZ_MIN, FZ_MAX], dtype=float))
                 sol = solvers.qp(P, q, Gc, h)
                 fx_l, fz_l = np.array(sol["x"]).flatten()
+                print(f"[DEBUG][qp_solver] CVXOPT left contact solution: fx_l={fx_l:.2f}, fz_l={fz_l:.2f}")
             except Exception:
                 fx_l, fz_l = np.linalg.lstsq(G_left, wrench_des, rcond=None)[0]
         else:
@@ -93,7 +95,7 @@ def solve_contact_qp(
     # Right-only contact
     if contact_right and not contact_left:
         G_right = G[:, 0:2]
-        Q = G_right.T @ G_right + 1e-6 * np.eye(2)
+        Q = G_right.T @ G_right + 1e-20 * np.eye(2)
         p = -G_right.T @ wrench_des
         if HAS_CVXOPT:
             try:
@@ -161,14 +163,6 @@ def solve_contact_qp(
     F = -np.array([Fx_r, Fz_r, Fx_l, Fz_l])
     return F
 
-
-# Default PD gains (can be overridden)
-DEFAULT_KP_ROOT_X = 0.0
-DEFAULT_KP_ROOT_Z = 15000.0
-DEFAULT_KD_ROOT_X = 1000.0
-DEFAULT_KD_ROOT_Z = 1000.0
-DEFAULT_KP_ROOT_THETA = 3.0
-DEFAULT_KD_ROOT_THETA = 1.0
 VERT_AXIS = 2  # MuJoCo's +Z is vertical axis
 
 
@@ -190,6 +184,8 @@ def qp_controller(
     theta_des: float,  # desired pitch angle
     q_des: np.ndarray,
     qd_des: np.ndarray,
+    left_enable: bool = True,
+    right_enable: bool = True,
 ) -> QPControllerResult:
     """QP-based contact force controller.
     
@@ -246,7 +242,7 @@ def qp_controller(
         sim.get_viewer(),
         trunk_pos,
         trunk_pos + np.array([fx_des, 0.0, fz_des]) * 0.01,
-        np.array([0.0, 1.0, 0.0, 0.6]),
+        np.array([0, 1.0, 0.5, 0.6]),
     )
     debug.draw_arrow(
         sim.get_viewer(),
@@ -294,10 +290,19 @@ def qp_controller(
     G[2, 3] = dx_l   # Fz_l moment arm
     
     # Solve QP for contact forces
-    F = solve_contact_qp(G, wrench_des, contact_left, contact_right)
+    F = solve_contact_qp(
+        G, 
+        wrench_des, 
+        contact_left and left_enable,
+        contact_right and right_enable
+        )
     # F = -F  # Negate to convert to MuJoCo frame convention
     Fx_r, Fz_r, Fx_l, Fz_l = F
-    info = {"contact_forces": np.array([Fx_r, Fz_r, Fx_l, Fz_l]), "right_contact": contact_right, "left_contact": contact_left}
+    info = {"contact_forces": np.array([Fx_r, Fz_r, Fx_l, Fz_l]), 
+            "right_contact": contact_right, 
+            "left_contact": contact_left
+            }
+    print(f"[DEBUG][qp_solver] Contact forces: Fx_r={Fx_r:.2f}, Fz_r={Fz_r:.2f}, Fx_l={Fx_l:.2f}, Fz_l={Fz_l:.2f}")
     debug.draw_contact_force_arrows(
         sim.get_viewer(),
         model,
