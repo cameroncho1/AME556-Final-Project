@@ -125,6 +125,7 @@ def run_simulation(
         viewer = mujoco.viewer.launch_passive(model, data)
         _GLOBAL_VIEWER = viewer
         cam_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_CAMERA, "side_follow")
+        # viewer.cam.type = mujoco.mjtCamera.mjCAMERA_FIXED
         viewer.cam.type = mujoco.mjtCamera.mjCAMERA_FREE
         viewer.cam.fixedcamid = cam_id
         if description:

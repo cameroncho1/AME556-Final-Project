@@ -1,18 +1,19 @@
 <mujoco model = "biped_robot">
     <option gravity="0 0 -9.81"/>
     <worldbody>
-        <!-- Follow the robot COM from the +Y side (not top-down) -->
-        <camera
-            name="side_follow"
-            mode="trackcom"
-            pos="10 13.0 10.45"
-            fovy="45"
-            xyaxes="0 1 0  0 0 1"
-        />
+        <!-- Camera sits at +Y and looks toward the robot along -Y -->
+        <camera name="side_follow" mode="trackcom" pos="0 -4 0.4" xyaxes="1 0 0  0 0 1"/>
 
         
         <body name="ground_body" pos="0 0 0">
             <geom name="ground" type = "plane" zaxis = "0 0 1" size = "20 20 .1" friction="0.5 0.0 0.0" solref="0.00316 1.58" rgba="0.7 0.9 0.7 1"/>
+            
+            <!-- <geom name="step0" type="box" pos="1.10 0 0.05" size="0.10 1.0 0.05" rgba="0.5 0.5 0.5 1"/>
+            <geom name="step1" type="box" pos="1.30 0 0.15" size="0.10 1.0 0.05" rgba="0.5 0.5 0.5 1"/>
+            <geom name="step2" type="box" pos="1.50 0 0.25" size="0.10 1.0 0.05" rgba="0.5 0.5 0.5 1"/>
+            <geom name="step3" type="box" pos="1.70 0 0.35" size="0.10 1.0 0.05" rgba="0.5 0.5 0.5 1"/>
+            <geom name="step4" type="box" pos="1.90 0 0.45" size="0.10 1.0 0.05" rgba="0.5 0.5 0.5 1"/> -->
+
         </body>
         <body name = "body_frame" pos = "0 0 0" >
             <inertial mass = "8" diaginertia="0.0419 0.0153 0.0433" pos = "0 0 0 "/>
