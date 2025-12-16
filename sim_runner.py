@@ -29,6 +29,9 @@ KNEE_TORQUE_LIMIT = 60.0  # Nm
 TORQUE_LIMITS = np.array([HIP_TORQUE_LIMIT, KNEE_TORQUE_LIMIT, HIP_TORQUE_LIMIT, KNEE_TORQUE_LIMIT])
 MU = 0.5  # Friction coefficient
 
+# Interactive viewer camera is driven by the XML camera `side_follow`
+# so that interactive view matches saved video.
+
 def _in_range(val: float, low: float, high: float) -> bool:
     return low <= val <= high
 

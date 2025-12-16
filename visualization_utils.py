@@ -184,8 +184,41 @@ def save_video(
 
     video_path = os.path.join(out_dir, filename)
     print(f"[INFO] Saving video ({len(video_frames)} frames at {fps} fps)...")
-    imageio.mimwrite(video_path, video_frames, fps=fps)
+    # Normalize frames to uint8 RGB. MuJoCo Renderer may return either float [0,1] or uint8 [0,255]
+    # depending on version/config. If we blindly multiply by 255 upstream, colors can wrap.
+    frames_u8: list[np.ndarray] = []
+    for f in video_frames:
+        frame = np.asarray(f)
+        if frame.ndim == 3 and frame.shape[2] == 4:
+            frame = frame[:, :, :3]  # drop alpha
+        if frame.dtype == np.uint8:
+            frames_u8.append(frame)
+            continue
+        frame_f = frame.astype(np.float32)
+        mx = float(np.nanmax(frame_f)) if frame_f.size else 0.0
+        if mx <= 1.5:
+            frame_f = np.clip(frame_f, 0.0, 1.0) * 255.0
+        else:
+            frame_f = np.clip(frame_f, 0.0, 255.0)
+        frames_u8.append(frame_f.astype(np.uint8))
+    imageio.mimwrite(video_path, frames_u8, fps=fps)
     print(f"[INFO] Video saved to: {video_path}")
+
+
+def frame_to_uint8_rgb(frame: np.ndarray) -> np.ndarray:
+    """Convert a MuJoCo renderer frame to uint8 RGB (safe across MuJoCo versions)."""
+    arr = np.asarray(frame)
+    if arr.ndim == 3 and arr.shape[2] == 4:
+        arr = arr[:, :, :3]
+    if arr.dtype == np.uint8:
+        return arr
+    arr_f = arr.astype(np.float32)
+    mx = float(np.nanmax(arr_f)) if arr_f.size else 0.0
+    if mx <= 1.5:
+        arr_f = np.clip(arr_f, 0.0, 1.0) * 255.0
+    else:
+        arr_f = np.clip(arr_f, 0.0, 255.0)
+    return arr_f.astype(np.uint8)
 
 
 def create_video_renderer(

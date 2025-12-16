@@ -16,7 +16,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 @dataclass
 class WalkingProfile:
-    speed: float = 1  # m/s
+    speed: float = 3 # m/s
     direction: int = 1  # 1 for forward, -1 for backward
     sim_time: float = 6.0
     step_length: float = 0.005
@@ -94,9 +94,9 @@ class WalkingMPCController:
             frame_period = 1.0 / visualization_utils.VIDEO_FPS
             expected_frames = int(t / frame_period)
             if len(self.video_frames) < expected_frames:
-                self.renderer.update_scene(data)
+                self.renderer.update_scene(data, camera="side_follow")
                 frame = self.renderer.render()
-                self.video_frames.append((frame * 255).astype(np.uint8))
+                self.video_frames.append(visualization_utils.frame_to_uint8_rgb(frame))
         print(f"[DEBUG][task2_walking] tau = {qp_result.tau}")
         left_contact, right_contact = foot_contacts(model, data)
         info = {

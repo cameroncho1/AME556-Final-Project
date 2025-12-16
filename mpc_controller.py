@@ -142,10 +142,10 @@ class FootstepMPCPlanner:
         # Intuition:
         # - if xd < v_des: step a bit farther forward to speed up
         # - if xd > v_des: step not as far forward (relative to the feedforward) to slow down
-        k_vel = 0.2
+        k_vel = 0.2 * max(trunk_state.xd, .2) 
         omega_safe = max(float(omega), 1e-6)
         capture_point = trunk_state.x + trunk_state.xd / omega_safe
-        base_target_x = -0.1 * self.step_time + capture_point - (0.15* self.v_des  + k_vel * (self.v_des - trunk_state.xd)) * self.step_time
+        base_target_x = (-0.1 * self.step_time + capture_point - (0.15* self.v_des  + k_vel * (self.v_des - trunk_state.xd)) * self.step_time)
         print(f"[DEBUG][MPC] v_des={self.v_des}, xd={trunk_state.xd}, target_x={base_target_x}")
         swing_seq: List[str] = []
         footsteps: List[np.ndarray] = []
@@ -153,7 +153,7 @@ class FootstepMPCPlanner:
 
         for k in range(self.horizon_steps):
             y_off = self.step_width * 0.5 if swing == "left" else -self.step_width * 0.5
-            step_x = base_target_x + k * self.v_des * self.step_time
+            step_x = base_target_x + k * self.step_time * min(max(.2, trunk_state.xd), self.v_des)
             footsteps.append(np.array([step_x, y_off, 0.0]))
             swing_seq.append(swing)
             swing = "right" if swing == "left" else "left"
@@ -494,8 +494,9 @@ class ModelPredictiveController:
         # Reference is the first predicted step
         x_ref = x_pred[0] if len(x_pred) > 0 else trunk_state.x
         xd_ref = xd_pred[0] if len(xd_pred) > 0 else trunk_state.xd
+        print(f"[DEBUG][MPC] x_ref={x_ref}, xd_ref={xd_ref}")
         stance_x = foot_seq[0] if len(foot_seq) > 0 else trunk_state.x
-
+        
         x_ref = trunk_state.x
         # xd_ref = 0.0
         # xd_ref = 0.

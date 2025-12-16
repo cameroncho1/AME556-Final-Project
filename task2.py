@@ -153,9 +153,9 @@ class StandingQPController:
             num_logged = len(self.log_time)
             expected_frames = int(t / frame_period)
             if len(self.video_frames) < expected_frames:
-                self.renderer.update_scene(data)
+                self.renderer.update_scene(data, camera="side_follow")
                 frame = self.renderer.render()
-                self.video_frames.append((frame * 255).astype(np.uint8))
+                self.video_frames.append(viz.frame_to_uint8_rgb(frame))
         
         # Return forces for visualization
         return qp_result.tau, {
