@@ -20,21 +20,31 @@ except ImportError:
 FZ_MIN = 0.0  # Minimum vertical force
 
 # Weight-related constants for FZ_MAX calculation
-MASS_TOTAL = 8 + 2 * 0.25  # 0.2 kg body + 4x0.25 kg legs
+MASS_TOTAL = 8 + 2 * 0.25
 GRAVITY = 9.81
 WEIGHT_FORCE = MASS_TOTAL * GRAVITY
 FZ_MAX = 10 * WEIGHT_FORCE  # Maximum vertical force
-POSTURE_RATIO = 6e-4  # Weighting for posture torque regularization
+POSTURE_RATIO = 5e-3 # Weighting for posture torque regularization
+# POSTURE_RATIO = 0.0  # Weighting for posture torque regularization
+if False:
+    Kp_root_x = 0
+    Kd_root_x = 100
+    Kp_root_z = 100
+    Kd_root_z = 10
+    Kp_root_theta = 300
+    Kd_root_theta = 10
+    Kp_joint = 400
+    Kd_joint = 2
+else:
 
-Kp_root_x = 0
-Kd_root_x = 1000
-Kp_root_z = 16000
-Kd_root_z = 400
-Kp_root_theta = 300
-Kd_root_theta = 20
-Kp_joint = 4000  # Reduced from 120.0 to reduce oscillations
-Kd_joint = 200  # Reduced from 25.0 to reduce oscillations
-
+    Kp_root_x = 0
+    Kd_root_x = 40
+    Kp_root_z = 1000
+    Kd_root_z = 10
+    Kp_root_theta = 600
+    Kd_root_theta = 4
+    Kp_joint = 900
+    Kd_joint = 80
 
 
 def solve_contact_qp(
@@ -63,7 +73,7 @@ def solve_contact_qp(
     # Left-only contact
     if contact_left and not contact_right:
         G_left = G[:, 2:4]
-        Q = G_left.T @ G_left + 1e-20 * np.eye(2)
+        Q = G_left.T @ G_left + 1e-6 * np.eye(2)
         p = -G_left.T @ wrench_des
         if HAS_CVXOPT:
             try:
@@ -95,7 +105,7 @@ def solve_contact_qp(
     # Right-only contact
     if contact_right and not contact_left:
         G_right = G[:, 0:2]
-        Q = G_right.T @ G_right + 1e-20 * np.eye(2)
+        Q = G_right.T @ G_right + 1e-6 * np.eye(2)
         p = -G_right.T @ wrench_des
         if HAS_CVXOPT:
             try:
@@ -124,7 +134,7 @@ def solve_contact_qp(
         return F
 
     # Both feet in contact (default 4-force problem)
-    Q = G.T @ G + 1e-20 * np.eye(4)
+    Q = G.T @ G + 1e-6 * np.eye(4)
     p = -G.T @ wrench_des
 
     if HAS_CVXOPT:
@@ -233,11 +243,23 @@ def qp_controller(
     # print("[DEBUG][task2] pitch_rate calculation:", pitch_rate)
 
     # PD control for root position
-    fz_des = Kp_root_z * (pos_des[2] - trunk_pos[2]) + Kd_root_z * (vel_des[2] - trunk_vel[2])
+    fz_des = WEIGHT_FORCE + Kp_root_z * (pos_des[2] - trunk_pos[2]) + Kd_root_z * (vel_des[2] - trunk_vel[2])
     fx_des = Kp_root_x * (pos_des[0] - trunk_pos[0]) + Kd_root_x * (vel_des[0] - trunk_vel[0])
+    # fz_des = 0
+    # fx_des = 0
     # print("[DEBUG][qp_solver] fx_des calculation: {:.4f}  fz_des calculation: {:.4f}".format(fx_des, fz_des))
     # PD control for pitch
-    tau_theta = -(Kp_root_theta * (theta_des - pitch) + Kd_root_theta * (0.0 - pitch_rate))
+    debug.draw_arrow(
+        sim.get_viewer(),
+        trunk_pos,
+        trunk_pos + np.array([0.0, pitch, 0.0]),
+        np.array([0.5, 0.5, 1.0, 0.6]),
+    )
+    tau_theta = (Kp_root_theta * (theta_des - pitch) + Kd_root_theta * (0.0 - pitch_rate))
+    # tau_theta = -Kp_root_theta * (theta_des - pitch)
+    # tau_theta = -Kd_root_theta * (0.0 - pitch_rate)
+    # tau_theta = 2.5
+    print("[DEBUG][qp_solver] tau_theta calculation: {:.4f}".format(tau_theta))
     debug.draw_arrow(
         sim.get_viewer(),
         trunk_pos,
@@ -284,10 +306,10 @@ def qp_controller(
     dx_l = left_foot_pos[0] - trunk_pos[0]
     dz_l = left_foot_pos[2] - trunk_pos[2]
     
-    G[2, 0] = -dz_r  # Fx_r moment arm
-    G[2, 1] = dx_r   # Fz_r moment arm
-    G[2, 2] = -dz_l  # Fx_l moment arm
-    G[2, 3] = dx_l   # Fz_l moment arm
+    G[2, 0] = dz_r  # Fx_r moment arm
+    G[2, 1] = -dx_r   # Fz_r moment arm
+    G[2, 2] = dz_l  # Fx_l moment arm
+    G[2, 3] = -dx_l   # Fz_l moment arm
     
     # Solve QP for contact forces
     F = solve_contact_qp(
@@ -327,7 +349,7 @@ def qp_controller(
     # if debug_this_frame:
     #     print(f"[DEBUG][task2] tau_bias={_fmt_debug(tau_bias)}")
     posture_boost = POSTURE_RATIO * tau_posture  # Increased from 0.01 for better stability
-    tau = tau_contact + posture_boost
+    tau = tau_contact + posture_boost + tau_bias
     tau_raw = tau.copy()
 
     # # Apply low-pass filter to smooth torque commands and reduce flickering
@@ -338,9 +360,21 @@ def qp_controller(
     #     tau_filtered = tau_raw
 
     # self._prev_tau = tau_raw.copy()
+    if not contact_left:
+        tau[2] = 0.0
+        tau[3] = 0.0
+    if not contact_right:
+        tau[0] = 0.0
+        tau[1] = 0.0
+        
     # Clip to per-joint torque limits to avoid constraint violations
     tau = np.clip(tau_raw, -sim.TORQUE_LIMITS, sim.TORQUE_LIMITS)
-
+    debug.draw_tau(
+        sim.get_viewer(),
+        data,
+        tau
+    )
+    # tau[0] = .1
     # Debug draw tau
     if(False):
         joint_ids = [3, 4, 6, 7]

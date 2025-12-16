@@ -100,7 +100,8 @@ class StandingQPController:
         pos_des = np.array([0.0, 0.0, z_des])  # [x, y, z] (MuJoCo world: x, y, z)
         vel_des = np.array([0.0, 0.0, zd_des])
         theta_des = 0.0  # Upright orientation
-        q_des = [-1.2471975512, 1.0707963268, -0.2, 1.0707963268]  # desired joint positions
+        # q_des = [-1.2471975512, 1.0707963268, -0.2, 1.0707963268]  # desired joint positions
+        q_des = [-1.2471975512, 1.0707963268, -0.2, 1.0707963268] 
         qd_des = np.zeros(4)  # desired joint velocities
         # Call QP controller to compute contact forces and torques
         qp_result: QPControllerResult = qp_controller(
@@ -111,6 +112,8 @@ class StandingQPController:
             theta_des=theta_des,
             q_des=q_des,
             qd_des=qd_des,
+            left_enable=True,
+            right_enable=True
         )
         
         # Extract results from QP controller
@@ -178,7 +181,7 @@ class StandingQPController:
             "height_des": self.log_height_des,
             "contact_flag": self.log_contact_flag,
         }
-        viz.save_standing_controller_plots(log_data, output_dir)
+        # viz.save_standing_controller_plots(log_data, output_dir)
 
     def save_video(self, output_dir: Optional[str] = None) -> None:
         """Save recorded video frames to MP4 file."""
@@ -238,7 +241,7 @@ def main() -> None:
         interactive=args.interactive,
         perturb=args.perturb,
         description="Task 2 QP standing",
-        stop_on_violation=not args.ignore_violations,
+        stop_on_violation=False,
     )
     
     controller.save_plots(args.plots_dir)

@@ -157,10 +157,14 @@ def draw_tau(
     """
     joint_ids = [3, 4, 6, 7]
     for i in range(4):
+        if i < 2:
+            color = np.array([0.0, 0.4, 1.0, 0.6])  # blue for left leg
+        else:
+            color = np.array([1.0, 0.4, 0.0, 0.6])  # red for right leg
         joint_pos = data.xpos[joint_ids[i]]
         draw_arrow(
             viewer,
             joint_pos,
-            joint_pos + np.array([0.0, tau[i] * 1, 0.0]),
-            np.array([0.0, 0.4, 1.0, 0.6])
+            joint_pos + np.array([0.0, tau[i] * .2, 0.0]),
+            color
         )

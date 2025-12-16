@@ -10,28 +10,27 @@ from sim_runner import TORQUE_LIMITS, run_simulation, foot_contacts, get_viewer,
 import visualization_utils_walking as viz
 import visualization_utils
 import debug_tools
-from mpc_walking_controller import mpc_walking_controller, MPCFootstepPlanner
+from mpc_controller import create_mpc_controller
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 @dataclass
 class WalkingProfile:
-    speed: float = 0  # m/s
+    speed: float = 1  # m/s
     direction: int = 1  # 1 for forward, -1 for backward
     sim_time: float = 6.0
-    step_length: float = 0.1
-    step_time: float = .01
-    horizon: int = 2
+    step_length: float = 0.005
+    step_time: float = .14
+    horizon: int = 10
 
 class WalkingMPCController:
     def __init__(self, profile: WalkingProfile, debug_frames: int = 0):
         self.profile = profile
         self._debug_always = True
-        self._planner = MPCFootstepPlanner(
+        self._mpc = create_mpc_controller(
+            horizon_steps=profile.horizon,
             step_time=profile.step_time,
-            horizon=profile.horizon,
-            step_length_nom=profile.step_length,
-            v_des=profile.speed
+            v_des=profile.speed * profile.direction,
         )
         self._prev_tau: Optional[np.ndarray] = None
         self._filter_alpha = 0.1
@@ -69,19 +68,8 @@ class WalkingMPCController:
         # q_des = [-1.2471975512, 1.0707963268, -0.2, 1.0707963268]
         q_des = np.array([-0.5, 1.0, -0.5, 1.0])
         qd_des = np.zeros(4)
-        # Call MPC walking controller
-        qp_result = mpc_walking_controller(
-            model=model,
-            data=data,
-            planner=self._planner,
-            t=t,
-            pos_des=pos_des,
-            vel_des=vel_des,
-            theta_des=theta_des,
-            q_des=q_des,
-            qd_des=qd_des,
-            direction=self.profile.direction
-        )
+        # Call full MPC controller (predictive dynamics + QP contact allocation)
+        qp_result = self._mpc(model=model, data=data, t=t)
         # Logging
         trunk_state = get_trunk_state(model, data, "body_frame")
         x = trunk_state.pos[0]
@@ -99,7 +87,7 @@ class WalkingMPCController:
         self.log_joint_vel.append(qd.copy())
         self.log_tau_cmd.append(qp_result.tau.copy())
         self.log_contact_forces.append(qp_result.contact_forces.copy())
-        self.log_footsteps.append(np.array(self._planner.footsteps))
+        self.log_footsteps.append(np.array(self._mpc.planner.cached_plan.footsteps))
         # Video
         if self.recording_enabled and self.renderer is not None:
             dt = model.opt.timestep
@@ -110,7 +98,13 @@ class WalkingMPCController:
                 frame = self.renderer.render()
                 self.video_frames.append((frame * 255).astype(np.uint8))
         print(f"[DEBUG][task2_walking] tau = {qp_result.tau}")
-        return qp_result.tau, {}
+        left_contact, right_contact = foot_contacts(model, data)
+        info = {
+            "contact_forces": qp_result.contact_forces.copy(),
+            "left_contact": left_contact,
+            "right_contact": right_contact,
+        }
+        return qp_result.tau, info
 
     def save_plots(self, output_dir: Optional[str] = None) -> None:
         log_data = {
@@ -140,7 +134,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    profile = WalkingProfile(direction=args.direction, sim_time=args.sim_time)
+    profile = WalkingProfile(sim_time=args.sim_time)
     controller = WalkingMPCController(profile)
     if not args.no_video:
         from sim_runner import XML_PATH

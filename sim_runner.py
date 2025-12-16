@@ -143,6 +143,7 @@ def run_simulation(
 
         if tau_cmd is None:
             tau_cmd = prev_tau_cmd.copy()
+            print(f"[WARNING] Controller returned None tau at t={data.time:.3f} s; reusing previous command.")
         else:
             tau_cmd = np.asarray(tau_cmd, dtype=float)
             prev_tau_cmd = tau_cmd.copy()
@@ -167,8 +168,8 @@ def run_simulation(
         if viewer:
             # Clear debug arrows at the start of each frame
             # Draw contact force arrows if provided in info
-            if info and "contact_forces" in info:
-                debug_tools.draw_contact_force_arrows(viewer, model, data, info)
+            # if info and "contact_forces" in info:
+            #     debug_tools.draw_contact_force_arrows(viewer, model, data, info)
             
             viewer.sync()
             time_until_next_step = dt - (time.time() - step_start)

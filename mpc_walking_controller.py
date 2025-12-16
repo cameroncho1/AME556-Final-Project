@@ -114,12 +114,14 @@ def mpc_walking_controller(
         swing_curr = left_pos
         stance_curr = right_pos
         swing_idx = 2  # left foot
+        q_des = [-0.2, 1.0707963268, -1.2471975512, 1.0707963268]
     else:
         stance_contact = contact_left
         swing_contact = contact_right
         swing_curr = right_pos
         stance_curr = left_pos
         swing_idx = 0  # right foot
+        q_des = [-1.2471975512, 1.0707963268, -0.2, 1.0707963268]
 
     swing_des[2] = 0.4
     #calcualte the q_des
@@ -191,13 +193,13 @@ def mpc_walking_controller(
         # Assign swing torques to correct joint indices
         if swing_foot == 'left':
             # tau[0:2] += jacp[:2,0:2].T @ swing_force[:2]  # left hip, knee
-            tau += Jl.T @ np.array([-swing_force_x, -swing_force_z])  # left hip, knee    
+            # tau += Jl.T @ np.array([-swing_force_x, -swing_force_z])  # left hip, knee    
             print(f"[DEBUG][MPC] left tau after PD swing: {tau}")
             pass
         
         elif swing_foot == 'right':
             # tau[2:4] += jacp[:2,2:4].T @ swing_force[:2]  # right hip, knee
-            tau += Jr.T @ np.array([-swing_force_x, -swing_force_z])  # right hip, knee
+            # tau += Jr.T @ np.array([-swing_force_x, -swing_force_z])  # right hip, knee
             print(f"[DEBUG][MPC] right tau after PD swing: {tau}")
             pass
         # Debug draw
