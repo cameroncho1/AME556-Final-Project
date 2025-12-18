@@ -1,0 +1,97 @@
+<mujoco model = "biped_robot_task5">
+    <option gravity="0 0 -9.81"/>
+    <worldbody>
+        <!-- Camera sits at +Y and looks toward the robot along -Y -->
+        <camera name="side_follow" mode="trackcom" pos="0 -4 0.4" xyaxes="1 0 0  0 0 1"/>
+
+        <!-- Terrain + obstacle course container -->
+        <body name="ground_body" pos="0 0 0">
+            <!-- Task 5 terrain profile (matches the provided figure):
+                 - Flat from x=[0,2.0] at z=0
+                 - Raised platform from x=[2.0,3.0] at z=+0.4
+                 - Flat from x=[3.0,5.0] at z=0
+                 - Pit from x=[5.0,5.4] at z=-0.4 (with vertical walls at x=5.0 and x=5.4)
+                 - Flat from x=[5.4,7.4] at z=0
+            -->
+            <!-- Width in Y (half-width) -->
+            <!-- We intentionally avoid an infinite plane so we can represent the pit. -->
+            <geom name="terrain0" type="box" pos="1.0 0 -0.05" size="1.0 1.0 0.05"
+                  friction="0.8 0.0 0.0" rgba="0.7 0.9 0.7 1"/>
+
+            <!-- Raised platform: length 1.0, height 0.4 -->
+            <geom name="terrain_platform" type="box" pos="2.5 0 0.35" size="0.5 1.0 0.05"
+                  friction="0.8 0.0 0.0" rgba="0.55 0.55 0.55 1"/>
+
+            <geom name="terrain1" type="box" pos="4.0 0 -0.05" size="1.0 1.0 0.05"
+                  friction="0.8 0.0 0.0" rgba="0.7 0.9 0.7 1"/>
+
+            <!-- Pit bottom: length 0.4, depth 0.4 -->
+            <geom name="terrain_pit_bottom" type="box" pos="5.2 0 -0.45" size="0.2 1.0 0.05"
+                  friction="0.8 0.0 0.0" rgba="0.55 0.55 0.55 1"/>
+
+            <!-- Pit walls at the edges (thin in X, tall in Z) -->
+            <geom name="terrain_pit_wall0" type="box" pos="5.0 0 -0.20" size="0.02 1.0 0.20"
+                  friction="0.8 0.0 0.0" rgba="0.45 0.45 0.45 1"/>
+            <geom name="terrain_pit_wall1" type="box" pos="5.4 0 -0.20" size="0.02 1.0 0.20"
+                  friction="0.8 0.0 0.0" rgba="0.45 0.45 0.45 1"/>
+
+            <geom name="terrain2" type="box" pos="6.4 0 -0.05" size="1.0 1.0 0.05"
+                  friction="0.8 0.0 0.0" rgba="0.7 0.9 0.7 1"/>
+        </body>
+
+        <body name="body_frame" pos="0 0 0" >
+            <inertial mass="8" diaginertia="0.0419 0.0153 0.0433" pos="0 0 0"/>
+
+            <geom name="body_geom" type="box" size=".075 .01 .125"/>
+
+            <joint name="x" type="slide" pos="0 0 0" axis="1 0 0" range="-1 20" limited="true"/>
+            <joint name="z" type="slide" pos="0 0 0" axis="0 0 1" range=".1 .5" limited="true"/>
+            <joint name="body_rot" type="hinge" pos="0 0 0" axis="0 1 0"/>
+
+            <!-- left leg -->
+            <body name="left_thigh" pos="0 .04 -0.125" >
+                <joint name="q1" type="hinge" pos="0 0 0" axis="0 1 0"/>
+                <inertial mass="0.25" diaginertia="0.001008 1e-6 0.001008" pos="0 0 -.11"/>
+                <geom name="left_thigh_geom" type="capsule" fromto="0 0 0  0 0 -0.22" size="0.02"/>
+                <body name="left_shin" pos="0 0 -.22">
+                    <joint name="q2" pos="0 0 0" type="hinge" axis="0 1 0"/>
+                    <inertial mass="0.25" diaginertia="0.001008 1e-6 0.001008" pos="0 0 -.11"/>
+                    <geom name="left_shin_geom" type="capsule" fromto="0 .01 0 0 .01 -0.22" size=".02"/>
+                    <body name="left_foot" pos="0 .01 -0.22">
+                        <geom name="left_foot_geom" type="sphere" size="0.03" pos="0 0 0"
+                              rgba="0 0 1 1" friction="0.5 0.0 0.0"/>
+                    </body>
+                </body>
+            </body>
+
+            <!-- right leg -->
+            <body name="right_thigh" pos="0 -0.04 -0.125" >
+                <joint name="q3" type="hinge" pos="0 0 0" axis="0 1 0"/>
+                <inertial mass="0.25" diaginertia="0.001008 1e-6 0.001008" pos="0 0 -.11"/>
+                <geom name="right_thigh_geom" type="capsule" fromto="0 0 0  0 0 -0.22" size="0.02"/>
+                <body name="right_shin" pos="0 0 -.22">
+                    <joint name="q4" pos="0 0 0" type="hinge" axis="0 1 0"/>
+                    <inertial mass="0.25" diaginertia="0.001008 1e-6 0.001008" pos="0 0 -.11"/>
+                    <geom name="right_shin_geom" type="capsule" fromto="0 -.01 0 0 -.01 -0.22" size=".02"/>
+                    <body name="right_foot" pos="0 -.01 -0.22">
+                        <geom name="right_foot_geom" type="sphere" size="0.03" pos="0 0 0"
+                              rgba="1 0 0 1" friction="0.5 0.0 0.0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+    </worldbody>
+
+    <actuator>
+        <motor name="hip_L"  joint="q1" gear="1"/>
+        <motor name="knee_L" joint="q2" gear="1"/>
+        <motor name="hip_R"  joint="q3" gear="1"/>
+        <motor name="knee_R" joint="q4" gear="1"/>
+    </actuator>
+
+    <keyframe>
+        <key name="init" qpos="0 .55 0 -1.2471975512 1.0707963268 -.2 1.0707963268" qvel="0 0 0 0 0 0 0"/>
+    </keyframe>
+</mujoco>
+
+

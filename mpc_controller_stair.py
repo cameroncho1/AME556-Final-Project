@@ -25,7 +25,7 @@ import numpy as np
 
 import sim_runner as sim
 from sim_runner import MU, TORQUE_LIMITS, TrunkState, foot_contacts, get_trunk_state
-from terrain_utils import project_xy_away_from_edges, raycast_height_at_xy
+from terrain_utils import get_step_treads_from_model, project_xy_away_from_edges, raycast_height_at_xy, raycast_hitpos_at_xy
 from qp_solver import (
     QPControllerResult,
     POSTURE_RATIO,
@@ -48,13 +48,22 @@ if False:
     Kd_joint = 10.0
 else:
 
+    # Kp_root_x = 0
+    # Kd_root_x = 50
+    # Kp_root_z = 400
+    # Kd_root_z = 10
+    # Kp_root_theta = 1000
+    # Kd_root_theta = 20
+    # Kp_joint = 2000
+    # Kd_joint = 30
+
     Kp_root_x = 0
     Kd_root_x = 50
     Kp_root_z = 400
     Kd_root_z = 10
     Kp_root_theta = 1000
-    Kd_root_theta = 20
-    Kp_joint = 2000
+    Kd_root_theta = 200
+    Kp_joint = 20
     Kd_joint = 30
 
 # Desired joint posture (same convention as qp_solver)
@@ -129,6 +138,7 @@ class FootstepMPCPlanner:
         omega: float,
         left_pos: np.ndarray,
         right_pos: np.ndarray,
+        z_ref: float,
     ) -> FootstepPlan:
         """
         Build an alternating sequence of footsteps starting from the current swing foot.
@@ -143,18 +153,26 @@ class FootstepMPCPlanner:
         # Intuition:
         # - if xd < v_des: step a bit farther forward to speed up
         # - if xd > v_des: step not as far forward (relative to the feedforward) to slow down
-        k_vel = 0.2 * max(trunk_state.xd, .2) 
+        k_vel = 0.2 * max(trunk_state.xd, 0.2)
         omega_safe = max(float(omega), 1e-6)
         capture_point = trunk_state.x + trunk_state.xd / omega_safe
-        base_target_x = (-0.1 * self.step_time + capture_point - (0.15* self.v_des  + k_vel * (self.v_des - trunk_state.xd)) * self.step_time)
-        print(f"[DEBUG][MPC] v_des={self.v_des}, xd={trunk_state.xd}, target_x={base_target_x}")
+        # Stair-friendly: bias the first target *forward*.
+        # If xd < v_des, (v_des - xd) > 0 increases step length.
+        # if (support_z - trunk_state.z) < 0.1:
+        base_target_x = -0.1 * self.step_time + capture_point - (0.15* self.v_des + k_vel * (self.v_des - trunk_state.xd)) * self.step_time
+        # else:
+        #     base_target_x = -(0.1* self.v_des) * self.step_time
         swing_seq: List[str] = []
         footsteps: List[np.ndarray] = []
         swing = self.swing
 
         for k in range(self.horizon_steps):
             y_off = self.step_width * 0.5 if swing == "left" else -self.step_width * 0.5
-            step_x = base_target_x + k * self.step_time * min(max(.2, trunk_state.xd), self.v_des)
+            # step_x = base_target_x + k * self.step_time * min(max(.2, trunk_state.xd), self.v_des)
+            if (z_ref - trunk_state.z) < 0.03:
+                step_x = base_target_x + k * self.step_time * min(max(.2, trunk_state.xd), self.v_des)
+            else:
+                step_x = capture_point - .01
             footsteps.append(np.array([step_x, y_off, 0.0]))
             swing_seq.append(swing)
             swing = "right" if swing == "left" else "left"
@@ -267,6 +285,7 @@ class ModelPredictiveController:
         # fx_des = Kp_root_x * (x_ref - trunk_state.x) + Kd_root_x * (xd_ref - trunk_state.xd)
         # Track trunk height relative to the current support surface.
         z_ref = float(support_z + self.lipm.com_height)
+        print(f"[DEBUG][mpc_controller_stair] support_z = {support_z}, z_ref = {z_ref}, trunk_z = {trunk_state.z}")
         fz_des = MASS_TOTAL * GRAVITY + Kp_root_z * (z_ref - trunk_state.z) + Kd_root_z * (0.0 - trunk_state.zd)
         tau_theta = (Kp_root_theta * (self.theta_des - trunk_state.theta) + Kd_root_theta * (0.0 - trunk_state.thetad))
         return np.array([fx_des, fz_des, tau_theta])
@@ -293,8 +312,9 @@ class ModelPredictiveController:
         """
         bodyexclude = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "body_frame")
         z = 0.0
+        viewer = sim.get_viewer()
         if contact_left:
-            zl, _ = raycast_height_at_xy(
+            pos_l, _ = raycast_hitpos_at_xy(
                 model,
                 data,
                 float(left_pos[0]),
@@ -302,9 +322,17 @@ class ModelPredictiveController:
                 z_from=float(left_pos[2] + 1.0),
                 bodyexclude=bodyexclude,
             )
-            z = max(z, zl)
+            # print("[DEBUG] Left foot contact at z =", pos_l[2])
+            z = max(z, pos_l[2])
+            if viewer:
+                debug.draw_world_position(
+                    viewer,
+                    np.array(pos_l),
+                    np.array([1.0, 1.0, 0.0, 0.6]),
+                    size=0.02,
+                )
         if contact_right:
-            zr, _ = raycast_height_at_xy(
+            pos_r, _ = raycast_hitpos_at_xy(
                 model,
                 data,
                 float(right_pos[0]),
@@ -312,7 +340,19 @@ class ModelPredictiveController:
                 z_from=float(right_pos[2] + 1.0),
                 bodyexclude=bodyexclude,
             )
-            z = max(z, zr)
+            # print("[DEBUG] Right foot contact at z =", pos_r[2])
+            z = max(z, pos_r[2])
+                    
+            debug.draw_world_position(
+                viewer,
+                np.array(pos_r),
+                np.array([1.0, 1.0, 0.0, 0.6]),
+                size=0.02,
+            )
+        # hit_point = np.array([0.5 * (xl + xr), 0.5 * (yl + yr), z])
+        # Debug marker for estimated support height (only if a viewer exists).
+
+
         return float(z)
 
     def _allocate_contact(
@@ -534,11 +574,14 @@ class ModelPredictiveController:
         right_pos = data.xpos[right_id].copy()
         left_pos = data.xpos[left_id].copy()
 
+        support_z = self._support_height(model, data, contact_left, contact_right, left_pos, right_pos)
+        z_ref = float(support_z + self.lipm.com_height) 
         # Build/refresh plan
-        plan = self.planner.build_plan(trunk_state, self.lipm.omega, left_pos, right_pos)
+        plan = self.planner.build_plan(trunk_state, self.lipm.omega, left_pos, right_pos, z_ref)
         # Terrain-aware: lift planned footsteps to the top surface (+ foot radius) and
         # nudge them away from edges using multi-ray probing.
         bodyexclude = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "body_frame")
+        treads = get_step_treads_from_model(model, name_prefix="step")
         for k, f in enumerate(plan.footsteps):
             swing_k = plan.swing_sequence[k] if k < len(plan.swing_sequence) else self.planner.current_swing()
             r = self._foot_radius(model, swing_k)
@@ -552,6 +595,21 @@ class ModelPredictiveController:
                 probe=max(0.03, r),
                 drop_thresh=0.04,
             )
+            # If we are on a step top, clamp (x,y) away from edges using the tread AABB.
+            # This reduces accidental toe/leg collisions with the riser edge.
+            if treads and z_surf > 1e-3:
+                # Find the tread whose top height matches the raycast hit.
+                best = None
+                best_dz = 1e9
+                for tr in treads:
+                    dz = abs(float(tr["z_top"]) - float(z_surf))
+                    if dz < best_dz:
+                        best_dz = dz
+                        best = tr
+                if best is not None and best_dz < 0.03:
+                    margin = max(0.03, r)
+                    xr = float(np.clip(xr, float(best["x_min"]) + margin, float(best["x_max"]) - margin))
+                    yr = float(np.clip(yr, float(best["y_min"]) + margin, float(best["y_max"]) - margin))
             f[0] = float(xr)
             f[1] = float(yr)
             # Target is the foot sphere center, so lift by radius above the hit surface.
@@ -562,14 +620,14 @@ class ModelPredictiveController:
         # Reference is the first predicted step
         x_ref = x_pred[0] if len(x_pred) > 0 else trunk_state.x
         xd_ref = xd_pred[0] if len(xd_pred) > 0 else trunk_state.xd
-        print(f"[DEBUG][MPC] x_ref={x_ref}, xd_ref={xd_ref}")
+        # print(f"[DEBUG][MPC] x_ref={x_ref}, xd_ref={xd_ref}")
         stance_x = foot_seq[0] if len(foot_seq) > 0 else trunk_state.x
         
         x_ref = trunk_state.x
         # xd_ref = 0.0
         # xd_ref = 0.
         # xd
-        support_z = self._support_height(model, data, contact_left, contact_right, left_pos, right_pos)
+        # print(f"[DEBUG][MPC] support_z={support_z}")
         wrench_des = self._compute_wrench(trunk_state, x_ref, xd_ref, stance_x, support_z)
         # wrench_des
         # Swing foot tracking

@@ -28,23 +28,33 @@ POSTURE_RATIO = 5e-3 # Weighting for posture torque regularization
 # POSTURE_RATIO = 0.0  # Weighting for posture torque regularization
 if False:
     Kp_root_x = 0
-    Kd_root_x = 100
-    Kp_root_z = 100
-    Kd_root_z = 10
-    Kp_root_theta = 300
-    Kd_root_theta = 10
-    Kp_joint = 400
-    Kd_joint = 2
+    Kd_root_x = 400
+    Kp_root_z = 1000
+    Kd_root_z = 400
+    Kp_root_theta = 1000
+    Kd_root_theta = 4
+    Kp_joint = 90
+    Kd_joint = 80
 else:
-
+    # taks 3
     Kp_root_x = 0
-    Kd_root_x = 40
+    Kd_root_x = 400
     Kp_root_z = 1000
     Kd_root_z = 10
     Kp_root_theta = 600
     Kd_root_theta = 4
     Kp_joint = 900
     Kd_joint = 80
+
+    # last save after task4
+    # Kp_root_x = 0
+    # Kd_root_x = 40
+    # Kp_root_z = 1000
+    # Kd_root_z = 10
+    # Kp_root_theta = 600
+    # Kd_root_theta = 4
+    # Kp_joint = 900
+    # Kd_joint = 80
 
 
 def solve_contact_qp(
@@ -67,7 +77,7 @@ def solve_contact_qp(
         return Fx_clipped, Fz_clipped
     
     if not contact_left and not contact_right:
-        print("[WARN][qp_solver] No contacts detected; returning zero forces.")
+        # print("[WARN][qp_solver] No contacts detected; returning zero forces.")
         return np.zeros(4)
 
     # Left-only contact

@@ -25,6 +25,7 @@ import numpy as np
 
 import sim_runner as sim
 from sim_runner import MU, TORQUE_LIMITS, TrunkState, foot_contacts, get_trunk_state
+from terrain_utils import project_xy_away_from_edges, raycast_height_at_xy
 from qp_solver import (
     QPControllerResult,
     POSTURE_RATIO,
@@ -255,6 +256,7 @@ class ModelPredictiveController:
         x_ref: float,
         xd_ref: float,
         stance_x: float,
+        support_z: float,
     ) -> np.ndarray:
         """Compute desired wrench (fx, fz, tau_theta) for the trunk."""
         omega = self.lipm.omega
@@ -263,9 +265,55 @@ class ModelPredictiveController:
         fx_pd = Kp_root_x * (x_ref - trunk_state.x) + Kd_root_x * (xd_ref - trunk_state.xd)
         fx_des = fx_ff + fx_pd
         # fx_des = Kp_root_x * (x_ref - trunk_state.x) + Kd_root_x * (xd_ref - trunk_state.xd)
-        fz_des = MASS_TOTAL * GRAVITY + Kp_root_z * (self.lipm.com_height - trunk_state.z) + Kd_root_z * (0.0 - trunk_state.zd)
+        # Track trunk height relative to the current support surface.
+        z_ref = float(support_z + self.lipm.com_height)
+        fz_des = MASS_TOTAL * GRAVITY + Kp_root_z * (z_ref - trunk_state.z) + Kd_root_z * (0.0 - trunk_state.zd)
         tau_theta = (Kp_root_theta * (self.theta_des - trunk_state.theta) + Kd_root_theta * (0.0 - trunk_state.thetad))
         return np.array([fx_des, fz_des, tau_theta])
+
+    @staticmethod
+    def _foot_radius(model: mujoco.MjModel, swing: str) -> float:
+        # Feet are modeled as sphere geoms named left_foot_geom / right_foot_geom.
+        geom_name = f"{swing}_foot_geom"
+        gid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, geom_name)
+        return float(model.geom_size[gid][0])
+
+    def _support_height(
+        self,
+        model: mujoco.MjModel,
+        data: mujoco.MjData,
+        contact_left: bool,
+        contact_right: bool,
+        left_pos: np.ndarray,
+        right_pos: np.ndarray,
+    ) -> float:
+        """
+        Estimate current support surface height from contacting feet.
+        Uses ray casting so stairs are detected from geometry without name-based queries.
+        """
+        bodyexclude = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "body_frame")
+        z = 0.0
+        if contact_left:
+            zl, _ = raycast_height_at_xy(
+                model,
+                data,
+                float(left_pos[0]),
+                float(left_pos[1]),
+                z_from=float(left_pos[2] + 1.0),
+                bodyexclude=bodyexclude,
+            )
+            z = max(z, zl)
+        if contact_right:
+            zr, _ = raycast_height_at_xy(
+                model,
+                data,
+                float(right_pos[0]),
+                float(right_pos[1]),
+                z_from=float(right_pos[2] + 1.0),
+                bodyexclude=bodyexclude,
+            )
+            z = max(z, zr)
+        return float(z)
 
     def _allocate_contact(
         self,
@@ -488,6 +536,26 @@ class ModelPredictiveController:
 
         # Build/refresh plan
         plan = self.planner.build_plan(trunk_state, self.lipm.omega, left_pos, right_pos)
+        # Terrain-aware: lift planned footsteps to the top surface (+ foot radius) and
+        # nudge them away from edges using multi-ray probing.
+        bodyexclude = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "body_frame")
+        for k, f in enumerate(plan.footsteps):
+            swing_k = plan.swing_sequence[k] if k < len(plan.swing_sequence) else self.planner.current_swing()
+            r = self._foot_radius(model, swing_k)
+            xr, yr, z_surf, _ = project_xy_away_from_edges(
+                model,
+                data,
+                float(f[0]),
+                float(f[1]),
+                z_from=float(trunk_state.z + 1.0),
+                bodyexclude=bodyexclude,
+                probe=max(0.03, r),
+                drop_thresh=0.04,
+            )
+            f[0] = float(xr)
+            f[1] = float(yr)
+            # Target is the foot sphere center, so lift by radius above the hit surface.
+            f[2] = float(z_surf + r)
         foot_seq = self._build_foot_sequence(plan, left_pos, right_pos)
         x_pred, xd_pred = self._predict_traj(trunk_state, foot_seq)
 
@@ -501,7 +569,8 @@ class ModelPredictiveController:
         # xd_ref = 0.0
         # xd_ref = 0.
         # xd
-        wrench_des = self._compute_wrench(trunk_state, x_ref, xd_ref, stance_x)
+        support_z = self._support_height(model, data, contact_left, contact_right, left_pos, right_pos)
+        wrench_des = self._compute_wrench(trunk_state, x_ref, xd_ref, stance_x, support_z)
         # wrench_des
         # Swing foot tracking
         swing = self.planner.current_swing()
@@ -521,7 +590,6 @@ class ModelPredictiveController:
             self._swing_start_body = self._world_to_body(trunk_state, foot_world)
             # Latch the swing landing target at liftoff (prevents mid-swing target drift)
             self._swing_target = plan.footsteps[0].copy() if plan.footsteps else np.zeros(3)
-            self._swing_target[2] = 0.0
             # Latch CoM x at liftoff for a dynamics-based phase variable
             self._swing_com_start_x = trunk_state.x
             self._prev_swing = swing
@@ -532,7 +600,6 @@ class ModelPredictiveController:
             self._swing_start_body = self._world_to_body(trunk_state, foot_world)
         if self._swing_target is None:
             self._swing_target = plan.footsteps[0].copy() if plan.footsteps else np.zeros(3)
-            self._swing_target[2] = 0.0
         if self._swing_com_start_x is None:
             self._swing_com_start_x = trunk_state.x
 
@@ -552,7 +619,11 @@ class ModelPredictiveController:
         # This keeps "dynamic-based" behavior but enforces a minimum rate to finish the step.
         phase_dyn = max(phase_dyn, phase_time)
         swing_des_body = start_body + (swing_target_body - start_body) * phase_dyn
-        swing_des_body[2] = swing_target_body[2] + self.swing_height * 4.0 * phase_dyn * (1.0 - phase_dyn)
+        # Use a smooth arc from start->target with clearance above the higher of the two.
+        rise = float(swing_target_body[2] - start_body[2])
+        clearance = max(float(self.swing_height), abs(rise) + 0.05)
+        z_lin = float(start_body[2] + rise * phase_dyn)
+        swing_des_body[2] = z_lin + clearance * 4.0 * phase_dyn * (1.0 - phase_dyn)
         swing_des = self._body_to_world(trunk_state, swing_des_body)
 
         # MPC-driven joint targets: solve IK for swing leg so the posture term supports the swing motion.

@@ -2,17 +2,17 @@
     <option gravity="0 0 -9.81"/>
     <worldbody>
         <!-- Camera sits at +Y and looks toward the robot along -Y -->
-        <camera name="side_follow" mode="trackcom" pos="0 -4 0.4" xyaxes="1 0 0  0 0 1"/>
+        <camera name="side_follow" mode="track" pos="0 -10 0.4" xyaxes="1 0 0  0 0 1" target="body_frame"/>
 
         
         <body name="ground_body" pos="0 0 0">
             <geom name="ground" type = "plane" zaxis = "0 0 1" size = "20 20 .1" friction="0.5 0.0 0.0" solref="0.00316 1.58" rgba="0.7 0.9 0.7 1"/>
             
-            <!-- <geom name="step0" type="box" pos="1.10 0 0.05" size="0.10 1.0 0.05" rgba="0.5 0.5 0.5 1"/>
-            <geom name="step1" type="box" pos="1.30 0 0.15" size="0.10 1.0 0.05" rgba="0.5 0.5 0.5 1"/>
-            <geom name="step2" type="box" pos="1.50 0 0.25" size="0.10 1.0 0.05" rgba="0.5 0.5 0.5 1"/>
-            <geom name="step3" type="box" pos="1.70 0 0.35" size="0.10 1.0 0.05" rgba="0.5 0.5 0.5 1"/>
-            <geom name="step4" type="box" pos="1.90 0 0.45" size="0.10 1.0 0.05" rgba="0.5 0.5 0.5 1"/> -->
+            <geom name="step0" type="box" pos="-1.10 0 0.05" size="0.10 1.0 0.05" rgba="0.5 0.5 0.5 1"/>
+            <geom name="step1" type="box" pos="-1.30 0 0.15" size="0.10 1.0 0.05" rgba="0.5 0.5 0.5 1"/>
+            <geom name="step2" type="box" pos="-1.50 0 0.25" size="0.10 1.0 0.05" rgba="0.5 0.5 0.5 1"/>
+            <geom name="step3" type="box" pos="-1.70 0 0.35" size="0.10 1.0 0.05" rgba="0.5 0.5 0.5 1"/>
+            <geom name="step4" type="box" pos="-1.90 0 0.45" size="0.10 1.0 0.05" rgba="0.5 0.5 0.5 1"/>
 
         </body>
         <body name = "body_frame" pos = "0 0 0" >
@@ -21,9 +21,9 @@
             </geom>
             <!--COM joints-->
             <!-- <joint name = "x" type = "slide" pos = "0 0 0" axis = "1 0 0"/> -->
-            <joint name = "x" type = "slide" pos = "0 0 0" axis = "1 0 0" range="-1 20" limited="true"/>
-            <!-- <joint name = "z" type = "slide" pos = "0 0 0" axis = "0 0 1"/> -->
-            <joint name = "z" type = "slide" pos = "0 0 0" axis = "0 0 1" range=".1 .5" limited="true"/>
+            <joint name = "x" type = "slide" pos = "0 0 0" axis = "1 0 0" range="-20 20" limited="true"/>
+            <joint name = "z" type = "slide" pos = "0 0 0" axis = "0 0 1"/>
+            <!-- <joint name = "z" type = "slide" pos = "0 0 0" axis = "0 0 1" range=".1 " limited="true"/> -->
             <!-- <joint name = "body_rot" type = "hinge" pos = "0 0 0" axis = "0 1 0" range="-9 9.57" limited="true"/> -->
             <joint name = "body_rot" type = "hinge" pos = "0 0 0" axis = "0 1 0"/>
             <!-- left leg -->

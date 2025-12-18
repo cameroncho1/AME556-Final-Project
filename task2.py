@@ -165,23 +165,7 @@ class StandingQPController:
             # "left_contact": left_contact,
         }
 
-    def save_plots(self, output_dir: Optional[str] = None) -> None:
-        """Save diagnostic plots using visualization utility."""
-        log_data = {
-            "time": self.log_time,
-            "root_pos": self.log_root_pos,
-            "root_vel": self.log_root_vel,
-            "joint_pos": self.log_joint_pos,
-            "joint_vel": self.log_joint_vel,
-            "tau_cmd": self.log_tau_cmd,
-            "tau_raw": self.log_tau_raw,
-            "tau_contact": self.log_tau_contact,
-            "posture_boost": self.log_posture_boost,
-            "contact_forces": self.log_contact_forces,
-            "height_des": self.log_height_des,
-            "contact_flag": self.log_contact_flag,
-        }
-        # viz.save_standing_controller_plots(log_data, output_dir)
+    pass  # Removed save_plots; now handled at task level
 
     def save_video(self, output_dir: Optional[str] = None) -> None:
         """Save recorded video frames to MP4 file."""
@@ -244,7 +228,28 @@ def main() -> None:
         stop_on_violation=False,
     )
     
-    controller.save_plots(args.plots_dir)
+    # Save diagnostic plots at the task level
+    log_data = {
+        "time": controller.log_time,
+        "root_pos": controller.log_root_pos,
+        "root_vel": controller.log_root_vel,
+        "joint_pos": controller.log_joint_pos,
+        "joint_vel": controller.log_joint_vel,
+        "tau_cmd": controller.log_tau_cmd,
+        "tau_raw": controller.log_tau_raw,
+        "tau_contact": controller.log_tau_contact,
+        "posture_boost": controller.log_posture_boost,
+        "contact_forces": controller.log_contact_forces,
+        "height_des": controller.log_height_des,
+        "contact_flag": controller.log_contact_flag,
+    }
+    import visualization_utils as viz
+    # Save plots in the same folder as sim_runner constraint plots
+    import os
+    HERE = os.path.dirname(os.path.abspath(__file__))
+    plot_dir = os.path.join(HERE, "task2_result", "plots")
+    os.makedirs(plot_dir, exist_ok=True)
+    viz.save_standing_controller_plots(log_data, plot_dir)
     if not args.no_video:
         controller.save_video(args.video_dir)
     print(f"[INFO] Simulation complete for t={result.final_time:.2f}s")

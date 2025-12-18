@@ -16,7 +16,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 @dataclass
 class WalkingProfile:
-    speed: float = 0.5 # m/s
+    speed: float = 2 # m/s
     direction: int = 1  # 1 for forward, -1 for backward
     sim_time: float = 6.0
     step_length: float = 0.005
@@ -147,9 +147,43 @@ def main() -> None:
         description="Task 3 MPC walking",
         stop_on_violation=False,
     )
-    out_dir = args.plots_dir or os.path.join(HERE, "task3_walking_result", "plots")
-    vid_dir = args.video_dir or os.path.join(HERE, "task3_walking_result", "videos")
-    controller.save_plots(out_dir)
+    # Use the same logic as sim_runner to determine the plot directory
+    import inspect
+    caller_frame = inspect.currentframe()
+    # Go up one frame to get the caller of main (should be __main__)
+    if caller_frame is not None and caller_frame.f_back is not None:
+        caller_filename = os.path.basename(caller_frame.f_back.f_code.co_filename)
+    else:
+        caller_filename = "task3.py"
+    if caller_filename.startswith("task") and caller_filename.endswith(".py"):
+        task_name = caller_filename[:-3]
+    else:
+        task_name = "sim_result"
+    plot_dir = os.path.join(HERE, f"{task_name}_result", "plots")
+    os.makedirs(plot_dir, exist_ok=True)
+    vid_dir = args.video_dir or os.path.join(HERE, f"{task_name}_result", "videos")
+    controller.save_plots(plot_dir)
+    # --- Plot and save body x position and velocity ---
+    import matplotlib.pyplot as plt
+    import numpy as np
+    times = np.array(controller.log_time)
+    root_pos = np.array(controller.log_root_pos)  # shape (N, 3)
+    root_vel = np.array(controller.log_root_vel)  # shape (N, 3)
+    fig, ax1 = plt.subplots(figsize=(10, 6))
+    ax1.plot(times, root_pos[:, 0], label='Body x position', color='tab:blue')
+    ax1.set_ylabel('x position (m)', color='tab:blue')
+    ax1.tick_params(axis='y', labelcolor='tab:blue')
+    ax2 = ax1.twinx()
+    ax2.plot(times, root_vel[:, 0], label='Body x velocity', color='tab:orange')
+    ax2.set_ylabel('x velocity (m/s)', color='tab:orange')
+    ax2.tick_params(axis='y', labelcolor='tab:orange')
+    ax1.set_xlabel('Time (s)')
+    plt.title('Body x Position and Velocity vs Time (Task 3)')
+    fig.tight_layout()
+    plot_path = os.path.join(plot_dir, 'body_x_pos_vel_vs_time.png')
+    plt.savefig(plot_path)
+    plt.close(fig)
+    print(f"Saved body x position/velocity plot to {plot_path}")
     if not args.no_video:
         controller.save_video(vid_dir)
     print(f"[INFO] Walking simulation complete for t={result.final_time:.2f}s")
