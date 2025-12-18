@@ -76,6 +76,8 @@ controller. All values remain within specified physical limits.
 controller. Actuator torques remain within saturation limits and joint constraints
 are respected throughout the simulation.
 
+### Simulation video link (Task 1):
+https://drive.google.com/file/d/1sO9Qa1a86yBy1ZxL9qIJz0DnCTPPp47L/view?usp=sharing
 
 ## 2. Task 2: Standing Control with QP-Based Contact Force Allocation
 
@@ -170,6 +172,8 @@ At each control step:
 
 **Figure 6.** Joint angles, velocities, and commanded torques over time for the Task 2 standing controller. 
 
+### Simulation video link (Task 2):
+https://drive.google.com/file/d/1vaC-tNPepqjLgZ5WdEXffF0YpFKvbGf0/view?usp=sharing
 
 ## 3. Task 2 (Walking): MPC Footstep Planning and QP Contact Allocation
 
@@ -279,6 +283,9 @@ At each control step:
 
 **Figure 12.** Walking Torques
 
+### Simulation video link (Task 2 Walking):
+https://drive.google.com/file/d/1srsVA-XzIlJfdCdn-KH3QcLx_JqoCqYo/view?usp=sharing
+
 ## 4. Task 3: Extended Walking with MPC, QP Contact Allocation, and Logging
 
 ### Approach
@@ -356,9 +363,12 @@ At each control step:
 
 **Figure 17.** Ground contact forces for the left and right feet for Task 3. Contact forces remain within friction and vertical force bounds, demonstrating stable foot–ground interaction.
 
-![Root States](https://raw.githubusercontent.com/cameroncho1/AME556-Final-Project/main/plots/task3/walking_torquespng)
+![Walking Torques](https://raw.githubusercontent.com/cameroncho1/AME556-Final-Project/main/plots/task3/walking_torques.png)
 
 **Figure 18.** Task 3 Torques
+
+### Simulation video link (Task 3):
+https://drive.google.com/file/d/10XK_dX_xzXEQCMMN-UlMxpUfWaAQ0V89/view?usp=sharing
 
 ## 5. Task 4: Stair Climbing with Terrain-Aware MPC and QP Contact Allocation
 
@@ -445,3 +455,5 @@ Hip motion adapts to increased elevation while remaining within joint and actuat
 **Figure 21.** Knee joint angles, velocities, and torques over time for Task 4 stair ascent.  
 Increased knee flexion enables foot clearance over stair edges while satisfying physical constraints.
 
+### Simulation video link (Task 4):
+https://drive.google.com/file/d/1U7_SGMvqCjaq9kQYiT1ouYH6RBCOEjUn/view?usp=sharing
