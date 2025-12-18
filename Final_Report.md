@@ -64,11 +64,18 @@ The simulation can either terminate immediately on violation (grading mode) or c
 
 ### Plots (Task 1)
 
-The following plots are included to verify constraint satisfaction:
+**Figure 1.** Hip joint angles, velocities, and torques over time for the Task 1 PD
+controller. All values remain within specified physical limits.
 
-- Joint angles vs. limits  
-- Joint velocities vs. limits  
-- Applied torques vs. actuator limits  
+![Hip joint states](https://raw.githubusercontent.com/cameroncho1/AME556-Final-Project/main/plots/task1/hip_q_qd_tau_vs_time.png)
+
+![Knee joint states](https://raw.githubusercontent.com/cameroncho1/AME556-Final-Project/main/plots/task1/knee_q_qd_tau_vs_time.png)
+
+
+**Figure 2.** Knee joint angles, velocities, and torques over time for the Task 1 PD
+controller. Actuator torques remain within saturation limits and joint constraints
+are respected throughout the simulation.
+
 
 ## 2. Task 2: Standing Control with QP-Based Contact Force Allocation
 
