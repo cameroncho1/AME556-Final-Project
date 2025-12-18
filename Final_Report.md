@@ -6,9 +6,6 @@
 - Takatoshi Soeda (soeda@usc.edu, USC ID)  
 - Cameron Cho (chocamer@usc.edu , 1499538650)
 
-**Simulation Video:**  
-https://link-to-video
-
 **Code Repository:**  
 https://github.com/cameroncho1/AME556-Final-Project
 
