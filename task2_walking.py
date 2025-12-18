@@ -16,7 +16,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 @dataclass
 class WalkingProfile:
-    speed: float = 3 # m/s
+    speed: float = 1 # m/s
     direction: int = 1  # 1 for forward, -1 for backward
     sim_time: float = 6.0
     step_length: float = 0.005
@@ -89,14 +89,14 @@ class WalkingMPCController:
         self.log_contact_forces.append(qp_result.contact_forces.copy())
         self.log_footsteps.append(np.array(self._mpc.planner.cached_plan.footsteps))
         # Video
-        if self.recording_enabled and self.renderer is not None:
-            dt = model.opt.timestep
-            frame_period = 1.0 / visualization_utils.VIDEO_FPS
-            expected_frames = int(t / frame_period)
-            if len(self.video_frames) < expected_frames:
-                self.renderer.update_scene(data, camera="side_follow")
-                frame = self.renderer.render()
-                self.video_frames.append(visualization_utils.frame_to_uint8_rgb(frame))
+        # if self.recording_enabled and self.renderer is not None:
+        #     dt = model.opt.timestep
+        #     frame_period = 1.0 / visualization_utils.VIDEO_FPS
+        #     expected_frames = int(t / frame_period)
+        #     if len(self.video_frames) < expected_frames:
+        #         self.renderer.update_scene(data, camera="side_follow")
+        #         frame = self.renderer.render()
+        #         self.video_frames.append(visualization_utils.frame_to_uint8_rgb(frame))
         print(f"[DEBUG][task2_walking] tau = {qp_result.tau}")
         left_contact, right_contact = foot_contacts(model, data)
         info = {
@@ -147,11 +147,12 @@ def main() -> None:
         description="Task 2 MPC walking",
         stop_on_violation=False,
     )
+    print("[WARNING] If the saved video does not follow the robot, check that the 'side_follow' camera in biped_robot.xml is set to mode='track' and target='body_frame'. The video renderer uses this camera for output.")
     out_dir = args.plots_dir or os.path.join(HERE, "task2_walking_result", "plots")
     vid_dir = args.video_dir or os.path.join(HERE, "task2_walking_result", "videos")
     controller.save_plots(out_dir)
-    if not args.no_video:
-        controller.save_video(vid_dir)
+    # if not args.no_video:
+    #     controller.save_video(vid_dir)
     print(f"[INFO] Walking simulation complete for t={result.final_time:.2f}s")
 
 if __name__ == "__main__":

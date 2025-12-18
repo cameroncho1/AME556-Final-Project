@@ -26,10 +26,12 @@ class Task1Controller:
             return tau_cmd, info
 
         q = data.qpos[3:7]
+        print(f"[DEBUG][Task1Controller] data.qpos[3:7]: {data.qpos[3:7]}")
         qd = data.qvel[3:7]
         tau_raw = Kp * (Q_DES - q) - Kd * qd
         tau_sat = np.clip(tau_raw, -TORQUE_LIMITS, TORQUE_LIMITS)
         info = {"raw_tau": tau_raw.copy()}
+        tau_sat = [0, 0, 0, 0]
         return tau_sat, info
 
 
