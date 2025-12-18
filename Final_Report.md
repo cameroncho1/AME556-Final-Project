@@ -64,10 +64,10 @@ The simulation can either terminate immediately on violation (grading mode) or c
 
 ### Plots (Task 1)
 
+![Hip joint states](https://raw.githubusercontent.com/cameroncho1/AME556-Final-Project/main/plots/task1/hip_q_qd_tau_vs_time.png)
+
 **Figure 1.** Hip joint angles, velocities, and torques over time for the Task 1 PD
 controller. All values remain within specified physical limits.
-
-![Hip joint states](https://raw.githubusercontent.com/cameroncho1/AME556-Final-Project/main/plots/task1/hip_q_qd_tau_vs_time.png)
 
 ![Knee joint states](https://raw.githubusercontent.com/cameroncho1/AME556-Final-Project/main/plots/task1/knee_q_qd_tau_vs_time.png)
 
@@ -154,10 +154,22 @@ At each control step:
 
 ### Plots (Task 2 – Standing)
 
-- Trunk height tracking  
-- Joint angles and velocities  
-- Joint torques vs. limits  
-- Contact forces vs. friction and force bounds  
+![Hip joint states](https://raw.githubusercontent.com/cameroncho1/AME556-Final-Project/main/plots/task2/hip_q_qd_tau_vs_time.png)
+
+**Figure 3.** Hip joint angles, velocities, and torques over time for the Task 2
+
+![Knee joint states](https://raw.githubusercontent.com/cameroncho1/AME556-Final-Project/main/plots/task2/knee_q_qd_tau_vs_time.png)
+
+**Figure 4.** Knee joint angles, velocities, and torques over time for the Task 2
+
+![Task 2 trunk state tracking](https://raw.githubusercontent.com/cameroncho1/AME556-Final-Project/main/plots/task2/task2_state_tracking.png)
+
+**Figure 5.** Trunk vertical position and pitch angle tracking over time for the Task 2 standing controller. The controller maintains upright posture while following the desired height trajectory.
+
+![Task 2 joint states](https://raw.githubusercontent.com/cameroncho1/AME556-Final-Project/main/plots/task2/task2_joint_states.png)
+
+**Figure 6.** Joint angles, velocities, and commanded torques over time for the Task 2 standing controller. 
+
 
 ## 3. Task 2 (Walking): MPC Footstep Planning and QP Contact Allocation
 
@@ -243,7 +255,193 @@ At each control step:
 
 ### Plots (Task 2 – Walking)
 
-- Trunk position and velocity  
-- Joint angles and velocities  
-- Joint torques  
-- Contact forces during walking  
+![Hip joint states](https://raw.githubusercontent.com/cameroncho1/AME556-Final-Project/main/plots/task2_walking/hip_q_qd_tau_vs_time.png)
+
+**Figure 7.** Hip joint angles, velocities, and torques over time for the Task 2 Walking
+
+![Knee joint states](https://raw.githubusercontent.com/cameroncho1/AME556-Final-Project/main/plots/task2_walking/knee_q_qd_tau_vs_time.png)
+
+**Figure 8.** Knee joint angles, velocities, and torques over time for the Task 2 Walking
+
+![Walking trunk state](https://raw.githubusercontent.com/cameroncho1/AME556-Final-Project/main/plots/task2_walking/walking_root_state.png)
+
+**Figure 9.** Trunk position, velocity, and pitch angle over time during walking. The MPC controller stabilizes the trunk while tracking forward motion and maintaining balance.
+
+![Walking joint states](https://raw.githubusercontent.com/cameroncho1/AME556-Final-Project/main/plots/task2_walking/walking_joint_states.png)
+
+**Figure 10.** Joint angles, velocities, and commanded torques over time for the walking task. Joint motions are smooth and actuator torques remain within specified limits throughout locomotion.
+
+![Walking contact forces](https://raw.githubusercontent.com/cameroncho1/AME556-Final-Project/main/plots/task2_walking/walking_contact_forces.png)
+
+**Figure 11.** Ground contact forces for the left and right feet during walking. Contact forces remain within friction and vertical force bounds, demonstrating stable foot–ground interaction.
+
+![Walking torques](https://raw.githubusercontent.com/cameroncho1/AME556-Final-Project/main/plots/task2_walking/walking_torques.png)
+
+**Figure 12.** Walking Torques
+
+## 4. Task 3: Extended Walking with MPC, QP Contact Allocation, and Logging
+
+### Approach
+
+Task 3 builds on the MPC walking controller from Task 2 by emphasizing **robust execution, logging, and visualization** during sustained walking.
+
+At each control step:
+
+1. A horizon-based footstep plan is generated using capture-point–inspired logic.
+2. Trunk dynamics are predicted over the horizon using a Linear Inverted Pendulum Model (LIPM).
+3. A desired trunk wrench is computed from LIPM feedforward dynamics and PD stabilization.
+4. The desired wrench is allocated to foot contact forces using the shared QP solver.
+5. Contact forces are mapped to joint torques via foot Jacobians.
+6. Swing-leg motion is generated using a latched target, parabolic height profile, and planar inverse kinematics.
+7. Joint-space posture stabilization is applied and torques are clipped to actuator limits.
+8. Trunk state, joint state, contact forces, and footsteps are logged for post-analysis, and optional video output is recorded.
+
+---
+
+### Code Structure
+
+#### `task3.py`
+
+**WalkingProfile**
+
+- Defines walking parameters including desired speed, step timing, horizon length, and simulation duration.
+
+---
+
+**WalkingMPCController**
+
+- `__init__(profile)`  
+  Initializes the MPC controller, logging buffers, and optional video recording state.
+
+- `enable_video_recording(model)`  
+  Sets up an offscreen renderer for video capture.
+
+- `__call__(model, data, t)`  
+  Executes the MPC walking controller, logs trunk and joint states, contact forces, and planned footsteps, and optionally records video frames.
+
+- `save_plots(output_dir)`  
+  Generates and saves diagnostic walking plots using shared visualization utilities.
+
+- `save_video(output_dir)`  
+  Writes the recorded walking video to disk.
+
+---
+
+**Main Entry**
+
+- Parses command-line arguments.
+- Initializes the walking profile and controller.
+- Runs the simulation using `run_simulation(...)`.
+- Saves plots, additional body position/velocity figures, and optional video output.
+
+### Plots (Task 3)
+
+![Hip joint states](https://raw.githubusercontent.com/cameroncho1/AME556-Final-Project/main/plots/task3/hip_q_qd_tau_vs_time.png)
+
+**Figure 13.** Hip joint angles, velocities, and torques over time for the Task 3
+
+![Knee joint states](https://raw.githubusercontent.com/cameroncho1/AME556-Final-Project/main/plots/task3/knee_q_qd_tau_vs_time.png)
+
+**Figure 14.** Knee joint angles, velocities, and torques over time for the Task 3
+
+![Walking trunk state](https://raw.githubusercontent.com/cameroncho1/AME556-Final-Project/main/plots/task3/walking_root_state.png)
+
+**Figure 15.** Trunk position, velocity, and pitch angle over time during walking. The MPC controller stabilizes the trunk while tracking forward motion and maintaining balance.
+
+![Walking joint states](https://raw.githubusercontent.com/cameroncho1/AME556-Final-Project/main/plots/task3/walking_joint_states.png)
+
+**Figure 16.** Joint angles, velocities, and commanded torques over time for the Task 3. Joint motions are smooth and actuator torques remain within specified limits throughout locomotion.
+
+![Walking contact forces](https://raw.githubusercontent.com/cameroncho1/AME556-Final-Project/main/plots/task3/walking_contact_forces.png)
+
+**Figure 17.** Ground contact forces for the left and right feet for Task 3. Contact forces remain within friction and vertical force bounds, demonstrating stable foot–ground interaction.
+
+![Root States](https://raw.githubusercontent.com/cameroncho1/AME556-Final-Project/main/plots/task3/walking_torquespng)
+
+**Figure 18.** Task 3 Torques
+
+## 5. Task 4: Stair Climbing with Terrain-Aware MPC and QP Contact Allocation
+
+### Approach
+
+Task 4 extends the MPC walking controller to enable **stair climbing** by incorporating **terrain-aware foot placement** and additional safety constraints.
+
+The staircase geometry is predefined in the MuJoCo model using step geoms (`step0`–`step4`) with fixed rise and run dimensions.
+
+At each control step:
+
+1. A horizon-based footstep plan is generated using MPC, with parameters tuned for stair ascent.
+2. Trunk dynamics are predicted using a Linear Inverted Pendulum Model (LIPM).
+3. A desired trunk wrench is computed from LIPM feedforward dynamics and PD stabilization.
+4. The wrench is allocated to feasible foot contact forces using the shared QP solver.
+5. Contact forces are mapped to joint torques via foot Jacobians.
+6. Swing-leg motion uses increased swing-foot clearance to safely clear stair edges.
+7. A safety constraint optionally enforces that **only foot geoms may contact stair geoms**, preventing body or leg collisions.
+8. Torques are clipped to actuator limits, and optional offscreen video is recorded.
+
+---
+
+### Code Structure
+
+#### `task4.py`
+
+**Task4StairController**
+
+- `__init__(v_des, step_time, horizon_steps, swing_height)`  
+  Initializes the stair-aware MPC controller, increases swing-foot clearance, and sets up optional video recording.
+
+- `enable_video_recording(model)`  
+  Initializes an offscreen renderer for stair-climbing video capture.
+
+- `__call__(model, data, t)`  
+  Executes the MPC stair-climbing controller, returns joint torques and debugging information, and records video frames if enabled.
+
+- `save_video(output_dir)`  
+  Writes the recorded stair-climbing video to disk.
+
+---
+
+**Stair Safety Constraint**
+
+- `_no_nonfoot_step_contacts(...)`  
+  Enforces a safety rule that only foot sphere geoms may contact stair geoms.  
+  Any body or leg contact with a step is reported as a violation (optional but recommended).
+
+---
+
+#### `mpc_controller_stair.py`
+
+This module implements a **terrain-aware model-predictive trunk controller** for stair climbing.  
+Unlike the flat-ground walking controller, it explicitly accounts for **step geometry**, **support height changes**, and **edge avoidance** while preserving the same MPC + QP control structure.
+
+**Terrain-Aware Swing Foot Control**
+
+- Planned footsteps are projected onto stair tread surfaces using ray casting.
+- Foot targets are nudged away from stair edges to reduce collision risk.
+- Swing trajectories use increased clearance and a parabolic height profile to safely clear stair risers.
+
+---
+
+**Main Entry**
+
+- Parses command-line arguments for simulation time, speed, horizon length, swing clearance, and safety checks.
+- Runs the simulation using `run_simulation(...)` with an optional terrain-aware constraint checker.
+- Saves stair-climbing video output if enabled.
+
+### Plots (Task 4)
+
+![Task 4 body height tracking](https://raw.githubusercontent.com/cameroncho1/AME556-Final-Project/main/plots/task4/body_height_vs_time.png)
+
+**Figure 19.** Trunk vertical position over time during stair climbing (Task 4).  
+The controller maintains stable height regulation while ascending discrete step elevations.
+
+![Task 4 hip joint states](https://raw.githubusercontent.com/cameroncho1/AME556-Final-Project/main/plots/task4/hip_q_qd_tau_vs_time.png)
+
+**Figure 20.** Hip joint angles, velocities, and commanded torques during stair climbing.  
+Hip motion adapts to increased elevation while remaining within joint and actuator limits.
+
+![Task 4 knee joint states](https://raw.githubusercontent.com/cameroncho1/AME556-Final-Project/main/plots/task4/knee_q_qd_tau_vs_time.png)
+
+**Figure 21.** Knee joint angles, velocities, and torques over time for Task 4 stair ascent.  
+Increased knee flexion enables foot clearance over stair edges while satisfying physical constraints.
+
